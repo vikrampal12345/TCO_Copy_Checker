@@ -1,0 +1,666 @@
+﻿from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+from typing import Any
+
+from app.core.model_provider import (
+    ModelProvider,
+    get_model_provider,
+)
+from app.schemas.evaluation_result import EvaluationResult
+from app.schemas.marking_scheme import MarkingScheme
+from app.schemas.page_result import QuestionEvaluation, PageResult
+from app.schemas.submission import AggregatedSubmission
+from app.services.marking_scheme_service import MarkingSchemeService
+
+
+class GradingModelError(ValueError):
+    """Raised when grading cannot be completed safely."""
+
+
+class GradingModel:
+    """
+    Grading model for handwritten answer-sheet evaluation.
+
+    Input:
+        - Aggregated student submission
+        - Teacher-approved and locked marking scheme
+
+    Output:
+        - Question-wise marks
+        - Reasons
+        - Confidence
+        - Total obtained marks
+        - Percentage
+
+    The model is intentionally provider-agnostic.
+    Current provider/model comes from ModelProvider.
+    """
+
+    def __init__(
+        self,
+        provider: ModelProvider | None = None,
+    ) -> None:
+        self.provider = provider or get_model_provider()
+        self.client = self.provider.get_client()
+        self.model = self.provider.get_text_model()
+
+    # ========================================================
+    # PUBLIC API
+    # ========================================================
+
+    def grade_submission(
+        self,
+        submission: AggregatedSubmission,
+        marking_scheme: MarkingScheme,
+        *,
+        job_id: str | None = None,
+        student_number: str | None = None,
+        assessment_id: str | None = None,
+        temperature: float = 0.0,
+    ) -> EvaluationResult:
+
+        # ----------------------------------------------------
+        # Marking scheme validation
+        # ----------------------------------------------------
+
+        MarkingSchemeService.validate(marking_scheme)
+
+        if marking_scheme.status != "locked":
+            raise GradingModelError(
+                "Grading requires a locked marking scheme."
+            )
+
+        # ----------------------------------------------------
+        # Submission validation
+        # ----------------------------------------------------
+
+        if submission.review_required:
+            raise GradingModelError(
+                "Submission requires review before grading. "
+                "Resolve extraction conflicts or unresolved "
+                "answers first."
+            )
+
+        resolved_job_id = (
+            job_id
+            or submission.job_id
+            or "UNASSIGNED"
+        )
+
+        resolved_student_number = (
+            student_number
+            or submission.student_number
+            or "UNKNOWN"
+        )
+
+        # ----------------------------------------------------
+        # Build grading input
+        # ----------------------------------------------------
+
+        grading_input = self._build_grading_input(
+            submission=submission,
+            marking_scheme=marking_scheme,
+        )
+
+        prompt = self._build_prompt(
+            grading_input=grading_input,
+            marking_scheme=marking_scheme,
+        )
+
+        # ----------------------------------------------------
+        # Model call
+        # ----------------------------------------------------
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a strict academic grading model. "
+                        "Evaluate student answers only according "
+                        "to the supplied marking scheme. "
+                        "Do not invent missing answers. "
+                        "Return only valid JSON."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            temperature=temperature,
+            response_format={
+                "type": "text",
+            },
+        )
+
+        raw_content = response.choices[0].message.content
+
+        if not raw_content:
+            raise GradingModelError(
+                "Grading model returned empty content."
+            )
+
+        parsed = self._parse_json(raw_content)
+
+        # ----------------------------------------------------
+        # Validate model output
+        # ----------------------------------------------------
+
+        graded_questions = self._validate_model_output(
+            parsed=parsed,
+            marking_scheme=marking_scheme,
+        )
+
+        # ----------------------------------------------------
+        # Deterministic totals
+        # ----------------------------------------------------
+
+        obtained_marks = sum(
+            float(item["marks_awarded"])
+            for item in graded_questions
+        )
+
+        total_marks = float(
+            marking_scheme.total_marks
+        )
+
+        if total_marks <= 0:
+            raise GradingModelError(
+                "Marking scheme total marks must be greater "
+                "than zero."
+            )
+
+        percentage = (
+            obtained_marks / total_marks
+        ) * 100.0
+
+        # ----------------------------------------------------
+        # Build question evaluations
+        # ----------------------------------------------------
+
+        answers_by_question = {
+            answer.question_no: answer
+            for answer in submission.answers
+        }
+
+        question_evaluations: list[QuestionEvaluation] = []
+
+        for item in graded_questions:
+
+            question_no = int(
+                item["question_no"]
+            )
+
+            scheme_question = next(
+                question
+                for question in marking_scheme.questions
+                if question.question_no == question_no
+            )
+
+            aggregated_answer = answers_by_question.get(
+                question_no
+            )
+
+            extracted_answer = (
+                aggregated_answer.answer
+                if aggregated_answer
+                else None
+            )
+
+            question_evaluations.append(
+                QuestionEvaluation(
+                    question_no=str(question_no),
+                    max_marks=float(
+                        scheme_question.max_marks
+                    ),
+                    marks_awarded=float(
+                        item["marks_awarded"]
+                    ),
+                    extracted_answer=extracted_answer,
+                    reason=str(
+                        item.get("reason", "")
+                    ),
+                    confidence=float(
+                        item.get("confidence", 0.0)
+                    ),
+                )
+            )
+
+        # ----------------------------------------------------
+        # Page grouping
+        # ----------------------------------------------------
+
+        page_results = self._build_page_results(
+            job_id=resolved_job_id,
+            question_evaluations=question_evaluations,
+            submission=submission,
+        )
+
+        # ----------------------------------------------------
+        # Final evaluation result
+        # ----------------------------------------------------
+
+        return EvaluationResult(
+            job_id=resolved_job_id,
+            status="graded",
+            student_id=resolved_student_number,
+            assessment_id=(
+                assessment_id
+                or marking_scheme.assessment_id
+            ),
+            pages_processed=submission.processed_pages,
+            total_pages=submission.total_pages,
+            total_marks=total_marks,
+            obtained_marks=obtained_marks,
+            percentage=percentage,
+            pages=[
+                page.model_dump()
+                for page in page_results
+            ],
+            warnings=[],
+        )
+
+    # ========================================================
+    # INPUT BUILDING
+    # ========================================================
+
+    @staticmethod
+    def _build_grading_input(
+        submission: AggregatedSubmission,
+        marking_scheme: MarkingScheme,
+    ) -> dict[str, Any]:
+
+        answers_by_question = {
+            answer.question_no: answer
+            for answer in submission.answers
+        }
+
+        questions: list[dict[str, Any]] = []
+
+        for scheme_question in marking_scheme.questions:
+
+            aggregated_answer = answers_by_question.get(
+                scheme_question.question_no
+            )
+
+            if aggregated_answer is None:
+                answer_text = "[NO ANSWER]"
+            else:
+                answer_text = (
+                    aggregated_answer.answer
+                    or "[NO ANSWER]"
+                )
+
+            criteria = [
+                {
+                    "criterion_id": criterion.criterion_id,
+                    "description": criterion.description,
+                    "marks": criterion.marks,
+                    "accepted_points": criterion.accepted_points,
+                }
+                for criterion in scheme_question.criteria
+            ]
+
+            questions.append(
+                {
+                    "question_no": scheme_question.question_no,
+                    "max_marks": scheme_question.max_marks,
+                    "evaluation_guidance": (
+                        scheme_question.evaluation_guidance
+                    ),
+                    "criteria": criteria,
+                    "student_answer": answer_text,
+                }
+            )
+
+        return {
+            "assessment_id": marking_scheme.assessment_id,
+            "total_marks": marking_scheme.total_marks,
+            "questions": questions,
+        }
+
+    # ========================================================
+    # PROMPT
+    # ========================================================
+
+    @staticmethod
+    def _build_prompt(
+        grading_input: dict[str, Any],
+        marking_scheme: MarkingScheme,
+    ) -> str:
+
+        return f"""
+Grade the student answer sheet strictly according to the
+provided marking scheme.
+
+IMPORTANT RULES:
+1. Grade every question in the marking scheme.
+2. Never award more than the question maximum marks.
+3. Award 0 when there is no answer or no valid credit.
+4. Give partial marks when the marking criteria support partial credit.
+5. Do not use outside information to change the marking scheme.
+6. Do not change the question maximum marks.
+7. Give a short reason for every question.
+8. Confidence must be between 0 and 1.
+9. Return ONLY JSON.
+
+MARKING SCHEME:
+{json.dumps(grading_input, ensure_ascii=False, indent=2)}
+
+REQUIRED OUTPUT FORMAT:
+{{
+  "questions": [
+    {{
+      "question_no": 1,
+      "marks_awarded": 0,
+      "reason": "Short grading reason",
+      "confidence": 0.95
+    }}
+  ]
+}}
+"""
+
+    # ========================================================
+    # JSON PARSING
+    # ========================================================
+
+    @staticmethod
+    def _parse_json(
+        raw_content: str,
+    ) -> dict[str, Any]:
+
+        content = raw_content.strip()
+
+        if content.startswith("```"):
+            lines = content.splitlines()
+
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+
+            content = "\n".join(lines).strip()
+
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise GradingModelError(
+                "Grading model returned invalid JSON."
+            ) from exc
+
+        if not isinstance(parsed, dict):
+            raise GradingModelError(
+                "Grading model output must be a JSON object."
+            )
+
+        return parsed
+
+    # ========================================================
+    # MODEL OUTPUT VALIDATION
+    # ========================================================
+
+    @staticmethod
+    def _validate_model_output(
+        parsed: dict[str, Any],
+        marking_scheme: MarkingScheme,
+    ) -> list[dict[str, Any]]:
+
+        raw_questions = parsed.get("questions")
+
+        if not isinstance(raw_questions, list):
+            raise GradingModelError(
+                "Grading output does not contain a valid "
+                "'questions' list."
+            )
+
+        expected_numbers = {
+            question.question_no
+            for question in marking_scheme.questions
+        }
+
+        actual_numbers: list[int] = []
+        validated_questions: list[dict[str, Any]] = []
+
+        for item in raw_questions:
+
+            if not isinstance(item, dict):
+                raise GradingModelError(
+                    "Each graded question must be a JSON object."
+                )
+
+            try:
+                question_no = int(
+                    item["question_no"]
+                )
+                marks_awarded = float(
+                    item["marks_awarded"]
+                )
+                confidence = float(
+                    item.get("confidence", 0.0)
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise GradingModelError(
+                    "Invalid question grading entry."
+                ) from exc
+
+            if question_no in actual_numbers:
+                raise GradingModelError(
+                    f"Duplicate grading result for Q{question_no}."
+                )
+
+            if question_no not in expected_numbers:
+                raise GradingModelError(
+                    f"Unexpected question number Q{question_no} "
+                    "returned by grading model."
+                )
+
+            scheme_question = next(
+                question
+                for question in marking_scheme.questions
+                if question.question_no == question_no
+            )
+
+            if marks_awarded < 0:
+                raise GradingModelError(
+                    f"Q{question_no}: awarded marks cannot "
+                    "be negative."
+                )
+
+            if marks_awarded > scheme_question.max_marks:
+                raise GradingModelError(
+                    f"Q{question_no}: awarded marks "
+                    f"{marks_awarded} exceed maximum "
+                    f"{scheme_question.max_marks}."
+                )
+
+            if not 0 <= confidence <= 1:
+                raise GradingModelError(
+                    f"Q{question_no}: confidence must be "
+                    "between 0 and 1."
+                )
+
+            reason = str(
+                item.get("reason", "")
+            ).strip()
+
+            if not reason:
+                raise GradingModelError(
+                    f"Q{question_no}: grading reason is required."
+                )
+
+            validated_questions.append(
+                {
+                    "question_no": question_no,
+                    "marks_awarded": marks_awarded,
+                    "reason": reason,
+                    "confidence": confidence,
+                }
+            )
+
+            actual_numbers.append(question_no)
+
+        actual_set = set(actual_numbers)
+
+        missing_questions = (
+            expected_numbers - actual_set
+        )
+
+        if missing_questions:
+            formatted = ", ".join(
+                f"Q{number}"
+                for number in sorted(missing_questions)
+            )
+
+            raise GradingModelError(
+                "Grading model did not return results for: "
+                + formatted
+            )
+
+        return sorted(
+            validated_questions,
+            key=lambda item: item["question_no"],
+        )
+
+    # ========================================================
+    # PAGE RESULTS
+    # ========================================================
+
+    @staticmethod
+    def _build_page_results(
+        job_id: str,
+        question_evaluations: list[QuestionEvaluation],
+        submission: AggregatedSubmission,
+    ) -> list[PageResult]:
+
+        answer_map = {
+            answer.question_no: answer
+            for answer in submission.answers
+        }
+
+        pages: dict[int, list[QuestionEvaluation]] = {}
+
+        for evaluation in question_evaluations:
+
+            question_no = int(
+                evaluation.question_no
+            )
+
+            aggregated_answer = answer_map.get(
+                question_no
+            )
+
+            if not aggregated_answer:
+                continue
+
+            if aggregated_answer.observations:
+                source_page = min(
+                    observation.page_no
+                    for observation
+                    in aggregated_answer.observations
+                )
+            else:
+                source_page = 1
+
+            pages.setdefault(
+                source_page,
+                [],
+            ).append(evaluation)
+
+        results: list[PageResult] = []
+
+        for page_number, questions in sorted(
+            pages.items()
+        ):
+
+            page_max_marks = sum(
+                question.max_marks or 0.0
+                for question in questions
+            )
+
+            page_marks_awarded = sum(
+                question.marks_awarded or 0.0
+                for question in questions
+            )
+
+            confidence = (
+                sum(
+                    question.confidence
+                    for question in questions
+                )
+                / len(questions)
+                if questions
+                else 0.0
+            )
+
+            results.append(
+                PageResult(
+                    job_id=job_id,
+                    page_number=page_number,
+                    status="graded",
+                    questions=questions,
+                    page_max_marks=page_max_marks,
+                    page_marks_awarded=page_marks_awarded,
+                    confidence=confidence,
+                    warnings=[],
+                    metadata={
+                        "grading": True,
+                    },
+                )
+            )
+
+        return results
+
+
+# ======================================================================
+# FUTURE GRADING REVIEW MODEL
+# ======================================================================
+#
+# KEEP THIS DISABLED FOR NOW.
+#
+# Later, when a better independent model is available, this reviewer
+# will receive:
+#     - original student answers
+#     - marking scheme
+#     - grading result
+#
+# It will independently verify whether the awarded marks are justified.
+#
+# Example future structure:
+#
+#
+# class GradingReviewModel:
+#
+#     def __init__(
+#         self,
+#         provider: ModelProvider | None = None,
+#     ) -> None:
+#         self.provider = provider or get_model_provider()
+#         self.client = self.provider.get_client()
+#         self.model = self.provider.get_text_model()
+#
+#     def review(
+#         self,
+#         evaluation_result: EvaluationResult,
+#         marking_scheme: MarkingScheme,
+#         submission: AggregatedSubmission,
+#     ) -> dict[str, Any]:
+#         ...
+#
+#
+# The workflow will later become:
+#
+#     GRADING MODEL
+#          ↓
+#     GRADING REVIEW MODEL
+#          ↓
+#     PASS → Teacher Review
+#       OR
+#     FAIL → re-grade affected questions
+#
+# ======================================================================
+
