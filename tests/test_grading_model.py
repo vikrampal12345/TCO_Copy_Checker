@@ -218,3 +218,191 @@ def test_grading_rejects_review_required_submission():
             submission=submission,
             marking_scheme=build_scheme(),
         )
+
+# ============================================================
+# MCQ TESTS
+# ============================================================
+
+
+# ============================================================
+# MCQ TESTS
+# ============================================================
+
+
+class FakeMCQCompletions:
+
+    def create(self, **kwargs):
+
+        # Intentionally return an incorrect model score.
+        # Deterministic MCQ scoring must override it.
+        content = """
+        {
+          "questions": [
+            {
+              "question_no": 1,
+              "marks_awarded": 0,
+              "reason": "Model deliberately returned zero.",
+              "confidence": 0.50
+            }
+          ]
+        }
+        """
+
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=content
+                    )
+                )
+            ]
+        )
+
+
+class FakeMCQClient:
+
+    def __init__(self):
+        self.chat = SimpleNamespace(
+            completions=FakeMCQCompletions()
+        )
+
+
+class FakeMCQProvider:
+
+    def __init__(self):
+        self.client = FakeMCQClient()
+
+    def get_client(self):
+        return self.client
+
+    def get_text_model(self):
+        return "fake-mcq-grading-model"
+
+
+def build_mcq_scheme(
+    correct_answer: str | None = "B",
+) -> MarkingScheme:
+
+    return MarkingScheme(
+        assessment_id="MCQ-TEST-001",
+        version=1,
+        status="locked",
+        generated_by="teacher",
+        total_marks=1.0,
+        questions=[
+            QuestionMarkingScheme(
+                question_no=1,
+                max_marks=1.0,
+                question_type="mcq",
+                correct_answer=correct_answer,
+            )
+        ],
+    )
+
+
+def build_mcq_submission(
+    answer: str,
+) -> AggregatedSubmission:
+
+    return AggregatedSubmission(
+        job_id="MCQ-JOB-001",
+        student_number="STU001",
+        total_pages=1,
+        processed_pages=1,
+        answers=[
+            AggregatedAnswer(
+                question_no=1,
+                answer=answer,
+                confidence=0.95,
+                observations=[
+                    AnswerObservation(
+                        page_no=1,
+                        question_no=1,
+                        answer=answer,
+                        confidence=0.95,
+                        source_tile="page_001",
+                    )
+                ],
+            )
+        ],
+        review_required=False,
+    )
+
+
+def test_mcq_deterministic_scoring_correct_answer():
+
+    grader = GradingModel(
+        provider=FakeMCQProvider()
+    )
+
+    result = grader.grade_submission(
+        submission=build_mcq_submission("B"),
+        marking_scheme=build_mcq_scheme("B"),
+    )
+
+    assert result.obtained_marks == 1.0
+    assert result.percentage == 100.0
+
+    question = result.pages[0]["questions"][0]
+
+    assert question["marks_awarded"] == 1.0
+    assert question["confidence"] == 1.0
+    assert "approved MCQ answer key" in question["reason"]
+
+
+def test_mcq_deterministic_scoring_wrong_answer():
+
+    grader = GradingModel(
+        provider=FakeMCQProvider()
+    )
+
+    result = grader.grade_submission(
+        submission=build_mcq_submission("C"),
+        marking_scheme=build_mcq_scheme("B"),
+    )
+
+    assert result.obtained_marks == 0.0
+    assert result.percentage == 0.0
+
+    question = result.pages[0]["questions"][0]
+
+    assert question["marks_awarded"] == 0.0
+    assert question["confidence"] == 1.0
+    assert "does not match" in question["reason"]
+
+
+@pytest.mark.parametrize(
+    "student_answer",
+    [
+        "B",
+        "b",
+        "(B)",
+        "[B]",
+        "Option B",
+        "Option B.",
+        "B.",
+    ],
+)
+def test_mcq_answer_normalization(student_answer):
+
+    normalized = GradingModel._normalize_mcq_answer(
+        student_answer
+    )
+
+    assert normalized == "b"
+
+
+def test_mcq_requires_correct_answer():
+
+    grader = GradingModel(
+        provider=FakeProvider()
+    )
+
+    with pytest.raises(
+        GradingModelError,
+        match="MCQ requires a correct_answer",
+    ):
+        grader.grade_submission(
+            submission=build_mcq_submission("B"),
+            marking_scheme=build_mcq_scheme(None),
+        )

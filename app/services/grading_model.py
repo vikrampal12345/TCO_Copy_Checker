@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import re
 from types import SimpleNamespace
 from typing import Any
 
@@ -71,6 +72,20 @@ class GradingModel:
             raise GradingModelError(
                 "Grading requires a locked marking scheme."
             )
+
+        # ----------------------------------------------------
+        # Objective answer-key validation
+        # ----------------------------------------------------
+
+        for question in marking_scheme.questions:
+            if (
+                question.question_type == "mcq"
+                and not question.correct_answer
+            ):
+                raise GradingModelError(
+                    f"Q{question.question_no}: MCQ requires "
+                    "a correct_answer in the locked marking scheme."
+                )
 
         # ----------------------------------------------------
         # Submission validation
@@ -152,6 +167,16 @@ class GradingModel:
 
         graded_questions = self._validate_model_output(
             parsed=parsed,
+            marking_scheme=marking_scheme,
+        )
+
+        # ----------------------------------------------------
+        # Deterministic MCQ scoring
+        # ----------------------------------------------------
+
+        self._apply_deterministic_mcq_scoring(
+            graded_questions=graded_questions,
+            submission=submission,
             marking_scheme=marking_scheme,
         )
 
@@ -310,6 +335,7 @@ class GradingModel:
                     "question_no": scheme_question.question_no,
                     "max_marks": scheme_question.max_marks,
                     "question_type": scheme_question.question_type,
+                    "correct_answer": scheme_question.correct_answer,
                     "evaluation_guidance": (
                         scheme_question.evaluation_guidance
                     ),
@@ -347,7 +373,19 @@ IMPORTANT RULES:
    - Award the full question marks when the student's answer is correct according to the marking scheme.
    - Award 0 when the answer is incorrect.
    - Do not give partial marks unless the marking scheme explicitly allows them.
-6. Subjective questions:
+6. MCQ grading is authoritative:
+   - The "correct_answer" field is the official approved answer key.
+   - Do not guess or infer a different correct option.
+   - Normalize case and simple formatting differences such as
+     "B", "b", "(B)", "Option B", and "B.".
+   - If the student's normalized answer matches the normalized
+     correct_answer, award the full question marks.
+   - If the student's answer does not match the correct_answer,
+     award 0 marks.
+   - Do not award partial marks for MCQ unless the marking scheme
+     explicitly defines partial credit.
+
+7. Subjective questions:
    - Evaluate the meaning, concepts, facts, reasoning, and key points in the student's answer.
    - Do not require exact wording from the reference answer.
    - Accept semantically equivalent wording when it satisfies the marking criteria.
@@ -360,11 +398,11 @@ IMPORTANT RULES:
      * 0 marks: incorrect, irrelevant, contradictory, or unanswered.
    - These are grading guidelines, not mandatory fixed scores; follow the marking criteria when they specify different partial-credit rules.
    - Do not penalize spelling or grammar unless the marking scheme explicitly requires it.
-7. Numerical, formula, diagram, and mixed questions must be graded according to their specific marking criteria and evaluation guidance.
-8. The marking scheme is authoritative. Do not invent new requirements, change criteria, or use outside information to alter the grading.
-9. Give a short reason explaining why the marks were awarded.
-10. Confidence must be between 0 and 1.
-11. Return ONLY JSON.
+8. Numerical, formula, diagram, and mixed questions must be graded according to their specific marking criteria and evaluation guidance.
+9. The marking scheme is authoritative. Do not invent new requirements, change criteria, or use outside information to alter the grading.
+10. Give a short reason explaining why the marks were awarded.
+11. Confidence must be between 0 and 1.
+12. Return ONLY JSON.
 
 MARKING SCHEME:
 {json.dumps(grading_input, ensure_ascii=False, indent=2)}
@@ -543,6 +581,170 @@ REQUIRED OUTPUT FORMAT:
             validated_questions,
             key=lambda item: item["question_no"],
         )
+
+    # ========================================================
+    # DETERMINISTIC MCQ SCORING
+    # ========================================================
+
+    @staticmethod
+    def _normalize_mcq_answer(value: str | None) -> str:
+        """
+        Normalize an MCQ answer for deterministic comparison.
+
+        Supported examples:
+            B
+            b
+            (B)
+            B.
+            Option B
+            Option B.
+            B. Booth's algorithm
+            (B) Booth's algorithm
+        """
+
+        text = str(value or "").strip().lower()
+
+        if not text:
+            return ""
+
+        # Normalize common Unicode punctuation.
+        text = (
+            text
+            .replace("?", "'")
+            .replace("?", "'")
+            .replace("?", '"')
+            .replace("?", '"')
+        )
+
+        # Normalize whitespace.
+        text = re.sub(r"\s+", " ", text).strip()
+
+        # Pure option marker:
+        # B
+        # (B)
+        # [B]
+        # Option B
+        marker_match = re.fullmatch(
+            r"(?:option\s*)?[\(\[\{]?\s*([a-z])\s*[\)\]\}\.]?",
+            text,
+        )
+
+        if marker_match:
+            return marker_match.group(1)
+
+        # Remove option marker from answers such as:
+        # B. Booth's algorithm
+        # (B) Booth's algorithm
+        # Option B - Booth's algorithm
+        text = re.sub(
+            r"^(?:option\s*)?[\(\[\{]?\s*[a-z]\s*[\)\]\}\.\:\-]\s*",
+            "",
+            text,
+        )
+
+        # Final whitespace cleanup.
+        text = re.sub(r"\s+", " ", text).strip()
+
+        # Ignore harmless trailing punctuation.
+        text = text.strip(" .,:;")
+
+        return text
+
+
+    @classmethod
+    def _apply_deterministic_mcq_scoring(
+        cls,
+        graded_questions: list[dict[str, Any]],
+        submission: AggregatedSubmission,
+        marking_scheme: MarkingScheme,
+    ) -> None:
+        """
+        Override LLM-produced marks for MCQs using the
+        teacher-approved answer key.
+
+        MCQ grading is deterministic:
+            correct -> full marks
+            incorrect -> 0
+            unanswered -> 0
+        """
+
+        answers_by_question = {
+            answer.question_no: answer
+            for answer in submission.answers
+        }
+
+        for item in graded_questions:
+            question_no = int(item["question_no"])
+
+            scheme_question = next(
+                question
+                for question in marking_scheme.questions
+                if question.question_no == question_no
+            )
+
+            if scheme_question.question_type != "mcq":
+                continue
+
+            correct_answer = scheme_question.correct_answer
+
+            if not correct_answer:
+                raise GradingModelError(
+                    f"Q{question_no}: MCQ requires "
+                    "a correct_answer in the locked marking scheme."
+                )
+
+            aggregated_answer = answers_by_question.get(
+                question_no
+            )
+
+            student_answer = (
+                aggregated_answer.answer
+                if aggregated_answer
+                else None
+            )
+
+            student_normalized = cls._normalize_mcq_answer(
+                student_answer
+            )
+
+            correct_normalized = cls._normalize_mcq_answer(
+                correct_answer
+            )
+
+            # ------------------------------------------------
+            # No student answer
+            # ------------------------------------------------
+
+            if not student_normalized:
+                item["marks_awarded"] = 0.0
+                item["reason"] = (
+                    "No student answer was extracted."
+                )
+                item["confidence"] = 1.0
+                continue
+
+            # ------------------------------------------------
+            # Exact normalized answer-key comparison
+            # ------------------------------------------------
+
+            if student_normalized == correct_normalized:
+                item["marks_awarded"] = float(
+                    scheme_question.max_marks
+                )
+                item["reason"] = (
+                    "Student answer matches the approved "
+                    "MCQ answer key."
+                )
+            else:
+                item["marks_awarded"] = 0.0
+                item["reason"] = (
+                    "Student answer does not match the approved "
+                    "MCQ answer key."
+                )
+
+            # The mark decision itself is deterministic.
+            item["confidence"] = 1.0
+
 
     # ========================================================
     # PAGE RESULTS

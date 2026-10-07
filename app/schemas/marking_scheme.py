@@ -35,7 +35,6 @@ class MarkingCriterion(BaseModel):
         description="Maximum marks assigned to this criterion.",
     )
 
-    # Optional guidance for semantic evaluation.
     accepted_points: list[str] = Field(
         default_factory=list,
         description=(
@@ -64,6 +63,7 @@ class QuestionMarkingScheme(BaseModel):
         ge=0,
         description="Maximum marks for the question.",
     )
+
     question_type: Literal[
         "mcq",
         "true_false",
@@ -75,6 +75,19 @@ class QuestionMarkingScheme(BaseModel):
         "mixed",
     ] = "subjective"
 
+    # --------------------------------------------------------
+    # MCQ ANSWER KEY
+    # --------------------------------------------------------
+
+    correct_answer: str | None = Field(
+        default=None,
+        description=(
+            "Correct answer for objective questions such as MCQ. "
+            "For MCQ this may be an option marker such as A, B, C, D "
+            "or the corresponding answer text."
+        ),
+    )
+
     criteria: list[MarkingCriterion] = Field(
         default_factory=list,
         description="Criteria used for partial-credit evaluation.",
@@ -82,9 +95,7 @@ class QuestionMarkingScheme(BaseModel):
 
     evaluation_guidance: str | None = Field(
         default=None,
-        description=(
-            "Additional guidance for evaluating this question."
-        ),
+        description="Additional guidance for evaluating this question.",
     )
 
 
