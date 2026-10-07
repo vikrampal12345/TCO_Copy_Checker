@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Literal
 
@@ -64,6 +64,16 @@ class QuestionMarkingScheme(BaseModel):
         ge=0,
         description="Maximum marks for the question.",
     )
+    question_type: Literal[
+        "mcq",
+        "true_false",
+        "fill_in",
+        "subjective",
+        "numerical",
+        "formula",
+        "diagram",
+        "mixed",
+    ] = "subjective"
 
     criteria: list[MarkingCriterion] = Field(
         default_factory=list,

@@ -309,6 +309,7 @@ class GradingModel:
                 {
                     "question_no": scheme_question.question_no,
                     "max_marks": scheme_question.max_marks,
+                    "question_type": scheme_question.question_type,
                     "evaluation_guidance": (
                         scheme_question.evaluation_guidance
                     ),
@@ -341,12 +342,29 @@ IMPORTANT RULES:
 1. Grade every question in the marking scheme.
 2. Never award more than the question maximum marks.
 3. Award 0 when there is no answer or no valid credit.
-4. Give partial marks when the marking criteria support partial credit.
-5. Do not use outside information to change the marking scheme.
-6. Do not change the question maximum marks.
-7. Give a short reason for every question.
-8. Confidence must be between 0 and 1.
-9. Return ONLY JSON.
+4. Use the question_type field to decide how the answer should be evaluated.
+5. MCQ, true_false, and fill_in:
+   - Award the full question marks when the student's answer is correct according to the marking scheme.
+   - Award 0 when the answer is incorrect.
+   - Do not give partial marks unless the marking scheme explicitly allows them.
+6. Subjective questions:
+   - Evaluate the meaning, concepts, facts, reasoning, and key points in the student's answer.
+   - Do not require exact wording from the reference answer.
+   - Accept semantically equivalent wording when it satisfies the marking criteria.
+   - Give partial marks when the student demonstrates partial understanding.
+   - For a 2-mark subjective question, use the available evidence to distinguish between approximately:
+     * 2.0 marks: complete and correct answer.
+     * 1.5 marks: mostly correct with a minor omission or weakness.
+     * 1.0 mark: core concept is correct but an important part is missing or incomplete.
+     * 0.5 marks: limited but relevant understanding.
+     * 0 marks: incorrect, irrelevant, contradictory, or unanswered.
+   - These are grading guidelines, not mandatory fixed scores; follow the marking criteria when they specify different partial-credit rules.
+   - Do not penalize spelling or grammar unless the marking scheme explicitly requires it.
+7. Numerical, formula, diagram, and mixed questions must be graded according to their specific marking criteria and evaluation guidance.
+8. The marking scheme is authoritative. Do not invent new requirements, change criteria, or use outside information to alter the grading.
+9. Give a short reason explaining why the marks were awarded.
+10. Confidence must be between 0 and 1.
+11. Return ONLY JSON.
 
 MARKING SCHEME:
 {json.dumps(grading_input, ensure_ascii=False, indent=2)}
@@ -663,4 +681,7 @@ REQUIRED OUTPUT FORMAT:
 #     FAIL → re-grade affected questions
 #
 # ======================================================================
+
+
+
 

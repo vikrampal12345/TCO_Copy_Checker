@@ -10,19 +10,29 @@ from app.schemas.evaluation_result import EvaluationResult
 
 class CheckedCopyRenderer:
     """
-    Creates a checked-copy PDF.
+    Creates a teacher-style checked-copy PDF.
 
     Current version:
         Original handwritten page
         +
-        grading panel on the right side.
+        teacher-style grading panel on the right.
 
-    Exact marks beside handwritten answers will be added later when
-    answer bounding-box coordinates are available from extraction.
+    The panel shows:
+        - Question number
+        - Red check/cross
+        - Marks awarded
+        - Short grading reason
+        - Overall result only on the last graded page
+
+    Exact marks beside the handwritten answer are intentionally
+    deferred until extraction provides answer bounding-box coordinates.
     """
 
-    PANEL_WIDTH = 760
+    PANEL_WIDTH = 700
     MARGIN = 30
+
+    CHECK_COLOR = "red"
+    TEXT_COLOR = "black"
 
     def render(
         self,
@@ -39,6 +49,8 @@ class CheckedCopyRenderer:
             exist_ok=True,
         )
 
+        pages_input = list(page_images)
+
         questions_by_page = {
             int(page["page_number"]): page.get(
                 "questions",
@@ -47,11 +59,24 @@ class CheckedCopyRenderer:
             for page in evaluation_result.pages
         }
 
+        graded_page_numbers = sorted(
+            page_number
+            for page_number, questions
+            in questions_by_page.items()
+            if questions
+        )
+
+        last_graded_page = (
+            graded_page_numbers[-1]
+            if graded_page_numbers
+            else None
+        )
+
         rendered_pages: list[Image.Image] = []
 
         try:
 
-            for page_no, original in page_images:
+            for page_no, original in pages_input:
 
                 base = original.convert("RGB")
 
@@ -82,6 +107,10 @@ class CheckedCopyRenderer:
 
                 panel_left = base.width
 
+                # ------------------------------------------------
+                # Panel separator
+                # ------------------------------------------------
+
                 draw.line(
                     (
                         panel_left,
@@ -96,10 +125,14 @@ class CheckedCopyRenderer:
                 x = panel_left + self.MARGIN
                 y = self.MARGIN
 
+                # ------------------------------------------------
+                # Header
+                # ------------------------------------------------
+
                 draw.text(
                     (x, y),
-                    "AI CHECKED COPY",
-                    fill="black",
+                    "TEACHER CHECKED COPY",
+                    fill=self.TEXT_COLOR,
                     font=font,
                 )
 
@@ -108,111 +141,278 @@ class CheckedCopyRenderer:
                 draw.text(
                     (x, y),
                     f"Page {page_no}",
-                    fill="black",
+                    fill=self.TEXT_COLOR,
                     font=small_font,
                 )
 
-                y += 35
-
-                obtained = (
-                    evaluation_result.obtained_marks
-                    or 0.0
-                )
-
-                total = (
-                    evaluation_result.total_marks
-                    or 0.0
-                )
-
-                percentage = (
-                    evaluation_result.percentage
-                    or 0.0
-                )
-
-                draw.text(
-                    (x, y),
-                    f"Overall: {obtained:.2f} / {total:.2f}",
-                    fill="black",
-                    font=small_font,
-                )
-
-                y += 30
-
-                draw.text(
-                    (x, y),
-                    f"Percentage: {percentage:.2f}%",
-                    fill="black",
-                    font=small_font,
-                )
-
-                y += 45
+                y += 40
 
                 questions = questions_by_page.get(
                     page_no,
                     [],
                 )
 
-                for question in questions:
+                # ------------------------------------------------
+                # Page information
+                # ------------------------------------------------
 
-                    if y >= canvas.height - 100:
-                        break
+                page_marks_awarded = sum(
+                    (
+                        float(
+                            question.get(
+                                "marks_awarded",
+                                0.0,
+                            )
+                            or 0.0
+                        )
+                    )
+                    for question in questions
+                )
+
+                page_max_marks = sum(
+                    (
+                        float(
+                            question.get(
+                                "max_marks",
+                                0.0,
+                            )
+                            or 0.0
+                        )
+                    )
+                    for question in questions
+                )
+
+                if questions:
+
+                    draw.text(
+                        (x, y),
+                        (
+                            f"Page Marks: "
+                            f"{page_marks_awarded:g} / "
+                            f"{page_max_marks:g}"
+                        ),
+                        fill=self.TEXT_COLOR,
+                        font=small_font,
+                    )
+
+                    y += 35
+
+                    draw.text(
+                        (x, y),
+                        "QUESTION-WISE MARKING",
+                        fill=self.TEXT_COLOR,
+                        font=font,
+                    )
+
+                    y += 45
+
+                else:
+
+                    draw.text(
+                        (x, y),
+                        "No graded questions on this page.",
+                        fill=self.TEXT_COLOR,
+                        font=small_font,
+                    )
+
+                    y += 40
+
+                # ------------------------------------------------
+                # Question-wise grading
+                # ------------------------------------------------
+
+                for question in questions:
 
                     question_no = question.get(
                         "question_no",
                         "?",
                     )
 
-                    marks = (
+                    marks = float(
                         question.get(
-                            "marks_awarded"
+                            "marks_awarded",
+                            0.0,
                         )
                         or 0.0
                     )
 
-                    max_marks = (
+                    max_marks = float(
                         question.get(
-                            "max_marks"
+                            "max_marks",
+                            0.0,
                         )
                         or 0.0
                     )
 
                     reason = str(
                         question.get(
-                            "reason"
+                            "reason",
                         )
                         or ""
                     ).strip()
 
+                    # Stop before the bottom of the page.
+                    if y >= canvas.height - 130:
+                        break
+
+                    # --------------------------------------------
+                    # Question row
+                    # --------------------------------------------
+
+                    question_text = (
+                        f"Q{question_no}: "
+                        f"{marks:g} / {max_marks:g}"
+                    )
+
                     draw.text(
                         (x, y),
-                        (
-                            f"Q{question_no}: "
-                            f"{marks:g} / {max_marks:g}"
-                        ),
-                        fill="black",
+                        question_text,
+                        fill=self.TEXT_COLOR,
                         font=font,
                     )
 
-                    y += 30
+                    # --------------------------------------------
+                    # Red teacher-style check / cross
+                    # --------------------------------------------
+
+                    icon_x = x + 150
+                    icon_y = y + 4
+
+                    if marks > 0:
+
+                        # Check mark: two connected strokes.
+                        draw.line(
+                            (
+                                icon_x,
+                                icon_y + 7,
+                                icon_x + 6,
+                                icon_y + 14,
+                            ),
+                            fill=self.CHECK_COLOR,
+                            width=3,
+                        )
+
+                        draw.line(
+                            (
+                                icon_x + 6,
+                                icon_y + 14,
+                                icon_x + 18,
+                                icon_y,
+                            ),
+                            fill=self.CHECK_COLOR,
+                            width=3,
+                        )
+
+                    else:
+
+                        # Cross mark for zero.
+                        draw.line(
+                            (
+                                icon_x,
+                                icon_y,
+                                icon_x + 14,
+                                icon_y + 14,
+                            ),
+                            fill=self.CHECK_COLOR,
+                            width=3,
+                        )
+
+                        draw.line(
+                            (
+                                icon_x + 14,
+                                icon_y,
+                                icon_x,
+                                icon_y + 14,
+                            ),
+                            fill=self.CHECK_COLOR,
+                            width=3,
+                        )
+
+                    # --------------------------------------------
+                    # Reason
+                    # --------------------------------------------
+
+                    y += 28
 
                     for line in self._wrap_text(
                         reason,
-                        width=42,
+                        width=55,
                     ):
 
                         if y >= canvas.height - 70:
                             break
 
                         draw.text(
-                            (x + 20, y),
+                            (x + 18, y),
                             line,
-                            fill="black",
+                            fill=self.TEXT_COLOR,
                             font=small_font,
                         )
 
-                        y += 25
+                        y += 22
 
-                    y += 12
+                    y += 18
+
+                # ------------------------------------------------
+                # Overall summary ONLY on last graded page
+                # ------------------------------------------------
+
+                if (
+                    last_graded_page is not None
+                    and page_no == last_graded_page
+                ):
+
+                    obtained = (
+                        evaluation_result.obtained_marks
+                        or 0.0
+                    )
+
+                    total = (
+                        evaluation_result.total_marks
+                        or 0.0
+                    )
+
+                    percentage = (
+                        evaluation_result.percentage
+                        or 0.0
+                    )
+
+                    summary_y = max(
+                        y + 10,
+                        canvas.height - 115,
+                    )
+
+                    draw.line(
+                        (
+                            x,
+                            summary_y - 8,
+                            canvas.width - self.MARGIN,
+                            summary_y - 8,
+                        ),
+                        fill="black",
+                        width=1,
+                    )
+
+                    draw.text(
+                        (x, summary_y),
+                        (
+                            f"OVERALL: "
+                            f"{obtained:.2f} / "
+                            f"{total:.2f}"
+                        ),
+                        fill=self.TEXT_COLOR,
+                        font=font,
+                    )
+
+                    draw.text(
+                        (x, summary_y + 28),
+                        (
+                            f"PERCENTAGE: "
+                            f"{percentage:.2f}%"
+                        ),
+                        fill=self.TEXT_COLOR,
+                        font=small_font,
+                    )
 
                 rendered_pages.append(canvas)
 
