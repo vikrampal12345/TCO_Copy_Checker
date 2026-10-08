@@ -1,0 +1,968 @@
+
+
+
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TCO — Teacher Co-Worker | Teach More. Manage Less.</title>
+  <meta name="description" content="TCO is an AI-powered digital co-worker for teachers. Let AI handle the repetitive non-teaching work so teachers can focus on teaching.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            background: {
+              darkest: '#050816',
+              deep: '#071020',
+              elevated: '#080B18',
+            },
+            primary: {
+              blue: '#3B82F6',
+              electric: '#38BDF8',
+              cyan: '#22D3EE',
+              purple: '#8B5CF6',
+              magenta: '#A855F7',
+            },
+            slate: {
+              text: '#F8FAFC',
+              muted: '#CBD5E1',
+              subtle: '#64748B',
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"Space Grotesk"', 'monospace'],
+          },
+          boxShadow: {
+            'glow-sm': '0 0 20px -5px rgba(59, 130, 246, 0.3)',
+            'glow-md': '0 0 35px -5px rgba(139, 92, 246, 0.35)',
+            'glow-lg': '0 0 55px -10px rgba(56, 189, 248, 0.4)',
+            'glass-card': '0 8px 32px 0 rgba(0, 0, 0, 0.37), inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #050816;
+      color: #F8FAFC;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      overflow-x: hidden;
+    }
+    .glass-panel {
+      background: rgba(10, 15, 35, 0.65);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+    .glass-panel-glow {
+      background: rgba(10, 15, 35, 0.72);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      box-shadow: 0 0 25px -5px rgba(56, 189, 248, 0.2), inset 0 0 15px -5px rgba(59, 130, 246, 0.15);
+    }
+    .bg-grid-pattern {
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+    .text-gradient-brand {
+      background: linear-gradient(135deg, #38BDF8 0%, #3B82F6 45%, #A855F7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .text-gradient-cyan {
+      background: linear-gradient(135deg, #FFFFFF 0%, #22D3EE 60%, #38BDF8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .text-gradient-purple {
+      background: linear-gradient(135deg, #C084FC 0%, #8B5CF6 50%, #6366F1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    @keyframes floatSlow {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes floatDelayed {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-12px); }
+    }
+    @keyframes scanline {
+      0% { top: 0%; }
+      50% { top: 92%; }
+      100% { top: 0%; }
+    }
+    .animate-float-slow { animation: floatSlow 7s ease-in-out infinite; }
+    .animate-float-delayed { animation: floatDelayed 8s ease-in-out 2s infinite; }
+    .animate-scanline { animation: scanline 3s ease-in-out infinite; }
+    .glow-orb {
+      position: absolute;
+      border-radius: 9999px;
+      filter: blur(80px);
+      pointer-events: none;
+      opacity: 0.45;
+    }
+    #cursor-glow {
+      pointer-events: none;
+      position: fixed;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, rgba(168, 85, 247, 0.08) 50%, transparent 70%);
+      transform: translate(-50%, -50%);
+      z-index: 9999;
+      transition: transform 0.05s ease-out;
+      display: none;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      #cursor-glow { display: block; }
+    }
+  </style>
+</head>
+<body class="selection:bg-primary-blue/30 selection:text-primary-electric">
+
+  <div id="cursor-glow"></div>
+
+  <!-- ROOT CONTAINER FOR SWITCHING VIEWS -->
+  <div id="view-marketing" class="block">
+    <!-- NAVIGATION HEADER -->
+    <header id="main-header" class="fixed top-0 left-0 right-0 z-50 transition-all duration-300 py-5 bg-transparent">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between">
+          
+          <!-- Logo -->
+          <a href="#home" class="flex items-center gap-3 group focus:outline-none">
+            <div class="relative w-10 h-10 rounded-xl bg-gradient-to-br from-primary-cyan via-primary-blue to-primary-magenta p-[1px] shadow-glow-sm">
+              <div class="w-full h-full bg-[#071020] rounded-[11px] flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 6h16" />
+                  <path d="M12 6v14" />
+                  <path d="M9 20h6" />
+                </svg>
+              </div>
+            </div>
+            <div class="flex flex-col">
+              <div class="flex items-center gap-1.5">
+                <span class="font-extrabold text-xl tracking-tight text-white group-hover:text-primary-electric transition-colors">TCO</span>
+                <span class="px-1.5 py-0.2 text-[9px] font-semibold uppercase bg-primary-blue/15 text-primary-electric border border-primary-blue/30 rounded-full">AI</span>
+              </div>
+              <span class="text-[11px] text-slate-muted font-medium">Teacher Co-Worker</span>
+            </div>
+          </a>
+
+          <!-- Desktop Navigation Links -->
+          <nav class="hidden md:flex items-center gap-1 bg-white/[0.03] border border-white/[0.08] px-4 py-1.5 rounded-full backdrop-blur-md text-sm font-medium text-slate-muted">
+            <a href="#home" class="px-3.5 py-1.5 hover:text-white transition-colors">Home</a>
+            <a href="#capabilities" class="px-3.5 py-1.5 hover:text-white transition-colors">Capabilities</a>
+            <a href="#how-it-works" class="px-3.5 py-1.5 hover:text-white transition-colors">How It Works</a>
+            <a href="#philosophy" class="px-3.5 py-1.5 hover:text-white transition-colors">Philosophy</a>
+            <a href="#for-schools" class="px-3.5 py-1.5 hover:text-white transition-colors">For Schools</a>
+            <a href="#faq" class="px-3.5 py-1.5 hover:text-white transition-colors">FAQ</a>
+          </nav>
+
+          <!-- Right Action Buttons -->
+          <div class="hidden md:flex items-center gap-3">
+            <button onclick="openAuthModal('login')" class="px-4 py-2 text-sm font-medium text-slate-muted hover:text-white transition-colors">
+              Faculty Login
+            </button>
+            <button onclick="switchToWorkspace()" class="relative group overflow-hidden px-5 py-2.5 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-primary-cyan via-primary-blue to-primary-magenta shadow-glow-sm hover:shadow-glow-md transition-all duration-300 transform hover:scale-[1.03]">
+              <span>Enter Workspace →</span>
+            </button>
+          </div>
+
+          <!-- Mobile Menu Toggle -->
+          <button onclick="toggleMobileMenu()" class="md:hidden p-2 text-slate-muted hover:text-white bg-white/[0.05] rounded-xl border border-white/10">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+        </div>
+
+        <!-- Mobile Drawer -->
+        <div id="mobile-menu" class="hidden md:hidden mt-3 p-5 glass-panel rounded-2xl border border-white/15 shadow-2xl flex-col gap-3">
+          <a href="#home" onclick="toggleMobileMenu()" class="block py-2 text-sm font-medium text-slate-muted hover:text-white">Home</a>
+          <a href="#capabilities" onclick="toggleMobileMenu()" class="block py-2 text-sm font-medium text-slate-muted hover:text-white">Capabilities</a>
+          <a href="#how-it-works" onclick="toggleMobileMenu()" class="block py-2 text-sm font-medium text-slate-muted hover:text-white">How It Works</a>
+          <a href="#philosophy" onclick="toggleMobileMenu()" class="block py-2 text-sm font-medium text-slate-muted hover:text-white">Philosophy</a>
+          <a href="#faq" onclick="toggleMobileMenu()" class="block py-2 text-sm font-medium text-slate-muted hover:text-white">FAQ</a>
+          <div class="pt-3 border-t border-white/10 flex flex-col gap-2">
+            <button onclick="openAuthModal('login')" class="w-full py-2.5 rounded-xl bg-white/[0.06] text-white text-xs font-semibold">Faculty Login</button>
+            <button onclick="switchToWorkspace()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-primary-cyan to-primary-magenta text-white text-xs font-bold">Open Teacher Workspace →</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- CINEMATIC HERO SECTION -->
+    <section id="home" class="relative min-h-screen pt-32 pb-24 flex flex-col justify-center items-center overflow-hidden bg-[#050816]">
+      <div class="absolute inset-0 bg-grid-pattern opacity-40 pointer-events-none"></div>
+      <div class="glow-orb w-[650px] h-[650px] bg-primary-blue/15 -top-40 left-1/2 -translate-x-1/2"></div>
+      <div class="glow-orb w-[500px] h-[500px] bg-primary-purple/15 top-1/3 left-1/4"></div>
+
+      <!-- Floating snapshot cards on desktop -->
+      <div class="hidden xl:block absolute inset-0 pointer-events-none max-w-7xl mx-auto">
+        <!-- Top Left: Question Paper -->
+        <div class="absolute top-28 left-4 pointer-events-auto animate-float-slow w-[290px] glass-panel rounded-2xl p-4 border border-white/10 shadow-glass-card">
+          <div class="flex justify-between items-center pb-2 mb-2 border-b border-white/5 text-xs font-bold text-white">
+            <span>Question Paper Generator</span>
+            <span class="text-[9px] px-2 py-0.5 rounded-full bg-primary-purple/20 text-primary-purple">Class 12</span>
+          </div>
+          <div class="text-[11px] bg-[#050816] p-2.5 rounded-xl mb-2 space-y-1">
+            <div class="flex justify-between text-slate-muted"><span>Topic:</span><span class="text-primary-electric font-semibold">Booth Algorithm</span></div>
+            <div class="flex justify-between text-slate-muted"><span>Format:</span><span class="text-white">20 MCQs (Bloom Balanced)</span></div>
+          </div>
+          <button onclick="switchToWorkspace()" class="w-full py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-primary-purple to-primary-magenta">Generate Test ✨</button>
+        </div>
+
+        <!-- Top Right: Copy Checking -->
+        <div class="absolute top-24 right-4 pointer-events-auto animate-float-delayed w-[300px] glass-panel rounded-2xl p-4 border border-white/10 shadow-glass-card">
+          <div class="flex justify-between items-center pb-2 mb-2 border-b border-white/5 text-xs font-bold text-white">
+            <span>Copy Checking Agent</span>
+            <span class="text-[9px] px-2 py-0.5 rounded-full bg-primary-cyan/20 text-primary-cyan">AI Scanning...</span>
+          </div>
+          <div class="relative h-20 bg-[#090f22] rounded-xl p-2 font-mono text-[9px] text-slate-300 overflow-hidden mb-2">
+            <div class="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-primary-cyan to-transparent animate-scanline z-10 shadow-[0_0_8px_#22D3EE]"></div>
+            <div>Aarav (Roll 001) - Physics 12</div>
+            <div>Step 1: Formula definition ✓ (+1)</div>
+            <div class="text-amber-300">⚠️ Step 3: Unit check (Suggest 1.5/2)</div>
+            <div class="text-emerald-400 font-bold">Total: 38.5 / 50 (Teacher Review)</div>
+          </div>
+          <button onclick="switchToWorkspace()" class="w-full py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-primary-cyan to-primary-blue">Review 3 Questions →</button>
+        </div>
+
+        <!-- Left Middle: Attendance -->
+        <div class="absolute top-[48%] -left-6 pointer-events-auto animate-float-delayed w-[270px] glass-panel rounded-2xl p-4 border border-white/10 shadow-glass-card">
+          <div class="flex justify-between items-center pb-2 mb-2 border-b border-white/5 text-xs font-bold text-white">
+            <span>Attendance Automation</span>
+            <span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">Live Feed</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-center mb-2">
+            <div class="p-2 rounded-lg bg-emerald-500/10"><div class="text-[9px] text-slate-muted">Present</div><div class="text-lg font-bold text-emerald-400">38</div></div>
+            <div class="p-2 rounded-lg bg-rose-500/10"><div class="text-[9px] text-slate-muted">Absent</div><div class="text-lg font-bold text-rose-400">4</div></div>
+          </div>
+          <div class="text-[10px] text-slate-muted flex justify-between"><span>Room 304</span><span class="text-emerald-400 font-semibold">1-Tap Verification</span></div>
+        </div>
+
+        <!-- Right Middle: Marksheet -->
+        <div class="absolute top-[46%] -right-6 pointer-events-auto animate-float-slow w-[280px] glass-panel rounded-2xl p-4 border border-white/10 shadow-glass-card">
+          <div class="flex justify-between items-center pb-2 mb-2 border-b border-white/5 text-xs font-bold text-white">
+            <span>Marksheet Generation</span>
+            <span class="text-[9px] text-primary-electric font-mono">Sec B Physics</span>
+          </div>
+          <div class="text-[10px] bg-[#050816] p-2 rounded-xl mb-2 divide-y divide-white/5">
+            <div class="flex justify-between py-0.5"><span>001 Aarav</span><span class="text-emerald-400 font-bold">85 (A1)</span></div>
+            <div class="flex justify-between py-0.5"><span>002 Priya</span><span class="text-emerald-400 font-bold">78 (A2)</span></div>
+            <div class="flex justify-between py-0.5"><span>003 Rohan</span><span class="text-primary-cyan font-bold">92 (A1)</span></div>
+          </div>
+          <div class="text-[10px] text-slate-subtle">Ready for PDF export & parent updates</div>
+        </div>
+      </div>
+
+      <!-- Central Hero Content -->
+      <div class="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-md mb-6">
+          <span class="w-2 h-2 rounded-full bg-primary-cyan animate-pulse"></span>
+          <span class="text-xs font-semibold tracking-wide text-slate-200">Your AI Teaching Assistant</span>
+        </div>
+
+        <div class="text-3xl sm:text-4xl font-black tracking-widest text-gradient-brand mb-2">TCO</div>
+
+        <h1 class="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-[1.08] mb-6">
+          <span class="text-white block">Teach More.</span>
+          <span class="text-gradient-brand block">Manage Less.</span>
+        </h1>
+
+        <h2 class="text-lg sm:text-xl md:text-2xl font-semibold text-slate-200 tracking-tight mb-4 max-w-2xl">
+          Your AI co-worker for the work behind the classroom.
+        </h2>
+
+        <p class="text-sm sm:text-base md:text-lg text-slate-muted leading-relaxed max-w-2xl mb-8">
+          TCO helps teachers handle repetitive work like attendance, question papers, assessment, handwritten answer checking, marksheets, reports, teaching materials, and parent communication — so they can spend more time teaching.
+        </p>
+
+        <div class="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto mb-10">
+          <button onclick="switchToWorkspace()" class="w-full sm:w-auto px-8 py-4 rounded-full text-base font-bold text-white bg-gradient-to-r from-primary-cyan via-primary-blue to-primary-magenta shadow-glow-md hover:shadow-glow-lg transition-all duration-300 transform hover:scale-[1.03]">
+            Open Teacher Workspace →
+          </button>
+          <button onclick="openDemoModal()" class="w-full sm:w-auto px-7 py-4 rounded-full text-base font-semibold text-white bg-white/[0.05] hover:bg-white/[0.1] border border-white/15 backdrop-blur-md transition-all flex items-center justify-center gap-2">
+            <span>Watch Workflow Demo</span>
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs sm:text-sm font-medium text-slate-muted">
+          <span>⏱️ Save Time</span>
+          <span>⚡ Reduce Workload</span>
+          <span>🎓 Focus on Teaching</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRUST STRIP -->
+    <section class="py-12 border-y border-white/10 bg-[#071020]/60 backdrop-blur-md text-center">
+      <div class="max-w-7xl mx-auto px-4 grid grid-cols-2 lg:grid-cols-4 gap-6 text-xs">
+        <div class="glass-panel p-5 rounded-2xl border border-white/5">
+          <div class="text-2xl font-black text-white">12+ hrs</div>
+          <div class="font-bold text-slate-200 mt-1">Hours Saved</div>
+          <div class="text-slate-muted">Designed to save hours weekly</div>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl border border-white/5">
+          <div class="text-2xl font-black text-white">10+ workflows</div>
+          <div class="font-bold text-slate-200 mt-1">Tasks Automated</div>
+          <div class="text-slate-muted">Built around real teacher tasks</div>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl border border-white/5">
+          <div class="text-2xl font-black text-white">Teacher in Control</div>
+          <div class="font-bold text-slate-200 mt-1">Teacher Reviewed</div>
+          <div class="text-slate-muted">Zero unverified autonomous grading</div>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl border border-white/5">
+          <div class="text-2xl font-black text-white">K-12 & Higher Ed</div>
+          <div class="font-bold text-slate-200 mt-1">Classroom Calibrated</div>
+          <div class="text-slate-muted">Aligned to board curriculums</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CAPABILITIES SECTION: INTERACTIVE SPLIT LAYOUT -->
+    <section id="capabilities" class="py-28 bg-[#050816]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center max-w-3xl mx-auto mb-16">
+          <span class="px-3 py-1 rounded-full bg-primary-cyan/15 text-primary-cyan text-xs font-semibold mb-3 inline-block">Adaptive AI Workflows</span>
+          <h2 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-4">What can TCO do for you?</h2>
+          <p class="text-base text-slate-muted">From attendance to assessment, TCO helps take care of the repetitive work behind your classroom.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          <div class="lg:col-span-6 space-y-2.5">
+            <div onclick="selectCap(0)" id="cap-item-0" class="cap-btn p-4 rounded-2xl glass-panel-glow border-primary-electric text-white cursor-pointer transition-all">
+              <h4 class="font-bold text-base">Check Answer Sheets</h4>
+              <p class="text-xs text-slate-muted">Handwritten OCR with step-by-step scoring against marking scheme.</p>
+            </div>
+            <div onclick="selectCap(1)" id="cap-item-1" class="cap-btn p-4 rounded-2xl glass-panel border-white/5 text-slate-muted hover:text-white cursor-pointer transition-all">
+              <h4 class="font-bold text-base">Create Question Papers</h4>
+              <p class="text-xs text-slate-muted">Bloom taxonomy calibrated MCQs, short and long questions with answer keys.</p>
+            </div>
+            <div onclick="selectCap(2)" id="cap-item-2" class="cap-btn p-4 rounded-2xl glass-panel border-white/5 text-slate-muted hover:text-white cursor-pointer transition-all">
+              <h4 class="font-bold text-base">Automate Attendance</h4>
+              <p class="text-xs text-slate-muted">Classroom sensor detection with absentee flagging and 1-tap sign-off.</p>
+            </div>
+            <div onclick="selectCap(3)" id="cap-item-3" class="cap-btn p-4 rounded-2xl glass-panel border-white/5 text-slate-muted hover:text-white cursor-pointer transition-all">
+              <h4 class="font-bold text-base">Generate Marksheets</h4>
+              <p class="text-xs text-slate-muted">Score tabulation, grade boundary moderation, and PDF transcripts.</p>
+            </div>
+            <div onclick="selectCap(4)" id="cap-item-4" class="cap-btn p-4 rounded-2xl glass-panel border-white/5 text-slate-muted hover:text-white cursor-pointer transition-all">
+              <h4 class="font-bold text-base">Create PPTs & Lesson Notes</h4>
+              <p class="text-xs text-slate-muted">Curriculum topic to classroom presentation slides and educator notes.</p>
+            </div>
+          </div>
+
+          <div class="lg:col-span-6">
+            <div class="glass-panel-glow rounded-3xl p-7 border border-white/15 shadow-2xl min-h-[380px] flex flex-col justify-between" id="cap-preview-box">
+              <div>
+                <div class="flex justify-between items-center pb-3 border-b border-white/10 mb-4 text-xs font-mono">
+                  <span class="text-primary-electric" id="cap-preview-status">Live Evaluation Engine</span>
+                  <span class="text-slate-subtle">CBSE Curriculum Aligned</span>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2" id="cap-preview-title">Class 12 Physics Mid-Term (STU047)</h3>
+                <div class="p-4 rounded-2xl bg-[#050816] border border-white/5 space-y-2 text-xs text-slate-300 my-4" id="cap-preview-lines">
+                  <div>✓ Page 3/32: Formula step matched (+1)</div>
+                  <div>✓ Vector substitution verified (+2)</div>
+                  <div class="text-amber-300">⚠️ Flagged: Intermediate unit omitted in calculation (Suggest 1.5/2)</div>
+                  <div>✓ Teacher verification gate active before grades commit</div>
+                </div>
+              </div>
+              <div class="pt-4 border-t border-white/10 flex justify-between items-center text-xs">
+                <span class="font-mono text-primary-electric text-lg font-bold" id="cap-preview-score">38.5 / 50 Marks</span>
+                <button onclick="switchToWorkspace()" class="px-4 py-2 rounded-xl bg-primary-blue/30 text-primary-electric hover:bg-primary-blue/50 font-bold transition-all">Launch in Workspace →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PHILOSOPHY: AI ASSISTS. TEACHERS DECIDE. -->
+    <section id="philosophy" class="py-24 bg-[#071020]/80 border-t border-white/5 text-center">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold mb-4 inline-block">Teacher-First Safeguards</span>
+        <h2 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-4">
+          AI assists. <span class="text-gradient-cyan">Teachers decide.</span>
+        </h2>
+        <p class="text-base text-slate-muted max-w-2xl mx-auto mb-12">
+          TCO is designed to reduce workload without taking away teacher control. We build an AI co-worker, not an AI teacher, and never an AI replacement.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left text-xs">
+          <div class="glass-panel p-6 rounded-2xl border border-white/10">
+            <h3 class="text-sm font-bold text-white mb-2">Teacher Approval</h3>
+            <p class="text-slate-muted">No grade or parent broadcast commits without explicit educator sign-off.</p>
+          </div>
+          <div class="glass-panel p-6 rounded-2xl border border-white/10">
+            <h3 class="text-sm font-bold text-white mb-2">Explainable Scoring</h3>
+            <p class="text-slate-muted">Step-by-step rationale and rubric citations displayed for every suggestion.</p>
+          </div>
+          <div class="glass-panel p-6 rounded-2xl border border-white/10">
+            <h3 class="text-sm font-bold text-white mb-2">Discretion Retained</h3>
+            <p class="text-slate-muted">Easily override partial credit based on personal understanding of student effort.</p>
+          </div>
+          <div class="glass-panel p-6 rounded-2xl border border-white/10">
+            <h3 class="text-sm font-bold text-white mb-2">Safe Automation</h3>
+            <p class="text-slate-muted">Strict curriculum boundaries prevent hallucinations and protect student records.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ SECTION -->
+    <section id="faq" class="py-24 bg-[#050816] border-t border-white/5">
+      <div class="max-w-4xl mx-auto px-4 text-xs sm:text-sm">
+        <div class="text-center mb-12">
+          <span class="text-xs uppercase text-primary-cyan font-bold font-mono">Frequently Asked Questions</span>
+          <h2 class="text-3xl font-extrabold text-white mt-1">Common questions from educators.</h2>
+        </div>
+        <div class="space-y-3">
+          <div class="glass-panel p-5 rounded-2xl border border-white/10">
+            <h4 class="font-bold text-white mb-2 text-sm">Does TCO automatically grade student exams without teacher involvement?</h4>
+            <p class="text-slate-muted leading-relaxed">No. TCO operates under a strict 'AI assists. Teachers decide' model. The AI scans and extracts handwriting, checks steps against the approved marking scheme, and flags borderline answers for your explicit review. The final mark is only submitted when the teacher confirms it.</p>
+          </div>
+          <div class="glass-panel p-5 rounded-2xl border border-white/10">
+            <h4 class="font-bold text-white mb-2 text-sm">Can I speak or type in Hindi / Hinglish?</h4>
+            <p class="text-slate-muted leading-relaxed">Yes! TCO's Master Agent naturally understands mixed English and Hinglish prompts like 'Class 12 ke 20 MCQ bana do' or 'Ye answer sheets check kar do', automatically determining syllabus requirements and formatting outputs accordingly.</p>
+          </div>
+          <div class="glass-panel p-5 rounded-2xl border border-white/10">
+            <h4 class="font-bold text-white mb-2 text-sm">Is student data used to train commercial AI models?</h4>
+            <p class="text-slate-muted leading-relaxed">No. Student assignments, assessment grades, and personal identifying information are kept confidential and are never used to train public commercial AI models.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="py-28 bg-[#050816] border-t border-white/10 text-center">
+      <div class="max-w-4xl mx-auto px-4">
+        <h2 class="text-4xl sm:text-6xl font-black text-white tracking-tight mb-4">
+          Spend less time managing. <br><span class="text-gradient-brand">More time teaching.</span>
+        </h2>
+        <p class="text-base text-slate-muted max-w-xl mx-auto mb-8">
+          Let TCO take care of the repetitive work behind your classroom, while you focus on your students.
+        </p>
+        <button onclick="switchToWorkspace()" class="px-9 py-4 rounded-full text-base font-bold text-white bg-gradient-to-r from-primary-cyan via-primary-blue to-primary-magenta shadow-glow-md hover:scale-105 transition-all">
+          Open Teacher Workspace →
+        </button>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="bg-[#040612] border-t border-white/10 py-12 text-slate-muted text-xs text-center">
+      <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div class="font-extrabold text-white text-base">TCO — Teacher Co-Worker</div>
+        <div class="text-slate-subtle">AI that handles the work behind the classroom.</div>
+        <div class="font-mono text-primary-electric">AI assists. Teachers decide.</div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- AUTHENTICATED TEACHER WORKSPACE VIEW (PART B) -->
+  <div id="view-workspace" class="hidden w-screen h-screen bg-[#050816] text-[#F8FAFC] flex overflow-hidden font-sans">
+    
+    <!-- 1. LEFT SIDEBAR -->
+    <aside id="workspace-sidebar" class="w-64 sm:w-72 bg-[#050917] border-r border-white/10 flex flex-col justify-between shrink-0 select-none z-30">
+      <div class="p-3 border-b border-white/5 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-cyan to-primary-magenta p-[1px]">
+              <div class="w-full h-full bg-[#071020] rounded-[7px] flex items-center justify-center font-bold text-xs text-white">T</div>
+            </div>
+            <div>
+              <span class="font-extrabold text-xs text-white block">TCO Workspace</span>
+              <span class="text-[9px] text-primary-cyan font-mono block">Teacher Co-Worker</span>
+            </div>
+          </div>
+          <button onclick="switchToMarketing()" class="text-[10px] text-slate-muted hover:text-white px-2 py-0.5 rounded bg-white/5">Website</button>
+        </div>
+
+        <button onclick="startNewTask()" class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-primary-cyan via-primary-blue to-primary-magenta text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm">
+          <span>+ New Task</span>
+        </button>
+
+        <input id="history-search" type="text" oninput="filterHistory(this.value)" placeholder="Search conversations..." class="w-full bg-[#071020] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-subtle focus:outline-none focus:border-primary-electric">
+      </div>
+
+      <!-- History List -->
+      <div id="history-list" class="flex-1 overflow-y-auto px-2 py-2 space-y-1 text-xs">
+        <div class="px-2 py-1 text-[10px] font-mono uppercase text-slate-subtle font-bold">Today</div>
+        <button onclick="loadConv('copy')" id="hist-copy" class="w-full p-2.5 rounded-xl bg-primary-blue/20 text-white font-semibold border border-primary-electric/40 text-left flex items-center justify-between">
+          <span class="truncate">Class 12 Answer Sheet Review</span>
+          <span class="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Review Required"></span>
+        </button>
+
+        <div class="px-2 py-1 text-[10px] font-mono uppercase text-slate-subtle font-bold pt-2">Yesterday</div>
+        <button onclick="loadConv('qp')" id="hist-qp" class="w-full p-2.5 rounded-xl hover:bg-white/5 text-slate-muted hover:text-white text-left flex items-center justify-between">
+          <span class="truncate">Class 12 Booth Algorithm Test</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+        </button>
+        <button onclick="loadConv('att')" id="hist-att" class="w-full p-2.5 rounded-xl hover:bg-white/5 text-slate-muted hover:text-white text-left flex items-center justify-between">
+          <span class="truncate">Morning Homeroom Attendance</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+        </button>
+
+        <div class="px-2 py-1 text-[10px] font-mono uppercase text-slate-subtle font-bold pt-2">Previous 7 Days</div>
+        <button onclick="loadConv('ppt')" id="hist-ppt" class="w-full p-2.5 rounded-xl hover:bg-white/5 text-slate-muted hover:text-white text-left flex items-center justify-between">
+          <span class="truncate">Neural Networks Presentation</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+        </button>
+      </div>
+
+      <!-- User footer -->
+      <div class="p-3 border-t border-white/10 bg-[#040714] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-full bg-primary-purple/30 text-white flex items-center justify-center font-bold text-xs">PS</div>
+          <div class="text-[11px] leading-tight"><div class="font-bold text-white">Prof. S. Sharma</div><div class="text-[9px] text-slate-subtle">Physics & CS</div></div>
+        </div>
+        <button onclick="switchToMarketing()" class="text-slate-subtle hover:text-rose-400 text-xs font-bold" title="Sign Out">✕</button>
+      </div>
+    </aside>
+
+    <!-- 2. CENTRAL CONVERSATION WORKSPACE -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden relative">
+      
+      <!-- Top Workspace Bar -->
+      <div class="h-14 px-5 bg-[#050917]/90 border-b border-white/5 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+          <h2 id="ws-conv-title" class="text-sm font-bold text-white">Class 12 Answer Sheet Review</h2>
+          <span id="ws-conv-status" class="px-2 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[10px] font-mono font-bold">
+            Review Required
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="openCommandPalette()" class="px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-slate-muted hover:text-white flex items-center gap-1.5">
+            <span>Search</span>
+            <kbd class="text-[9px] font-mono bg-white/10 px-1 py-0.2 rounded">⌘K</kbd>
+          </button>
+          <button onclick="toggleRightPanel()" class="px-3 py-1.5 rounded-xl bg-primary-blue/20 border border-primary-electric text-white text-xs font-bold flex items-center gap-1.5">
+            <span>Review Panel</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Canvas -->
+      <div id="ws-messages" class="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-4">
+        <!-- Message 1: User Prompt -->
+        <div class="flex justify-end max-w-3xl mx-auto">
+          <div class="p-3.5 rounded-2xl rounded-tr-none bg-gradient-to-r from-primary-blue to-primary-purple text-white text-xs sm:text-sm">
+            Class 12 ke 32-page answer sheet check kar do Physics mid-term ke liye.
+          </div>
+        </div>
+
+        <!-- Message 2: AI Response with Process View -->
+        <div class="flex justify-start max-w-3xl mx-auto gap-3">
+          <div class="w-8 h-8 rounded-xl bg-primary-blue/20 text-primary-electric flex items-center justify-center shrink-0 text-xs font-bold">AI</div>
+          <div class="space-y-3 max-w-[85%]">
+            <div class="p-4 rounded-2xl glass-panel border border-white/10 text-slate-200 text-xs sm:text-sm leading-relaxed">
+              I have identified Student STU047 (Aarav Sharma) across the 32-page answer booklet. Optical handwriting extraction and step-by-step rubric grading are complete. 3 borderline calculation steps were flagged for your personal review.
+            </div>
+
+            <!-- Process tracker -->
+            <div class="p-3 rounded-2xl bg-[#07132b] border border-white/10 text-xs space-y-1.5">
+              <div class="text-[10px] font-mono uppercase text-primary-cyan font-bold">What TCO is doing</div>
+              <div class="text-white flex items-center gap-1.5"><span>✓</span> Master Agent: Decomposed 32 pages into 35 rubric items</div>
+              <div class="text-white flex items-center gap-1.5"><span>✓</span> OCR Subsystem: Extracted formula steps & derivations</div>
+              <div class="text-white flex items-center gap-1.5"><span>✓</span> Evaluation Agent: Cross-referenced against approved rubric</div>
+              <div class="text-amber-400 font-bold flex items-center gap-1.5"><span>●</span> Teacher Review Required: 3 borderline answers flagged</div>
+            </div>
+
+            <!-- Result Card -->
+            <div class="p-4 rounded-2xl glass-panel-glow border border-white/15">
+              <div class="flex justify-between items-center pb-2 border-b border-white/10 mb-2">
+                <span class="font-bold text-white text-xs">Handwritten Answer Sheet: STU047</span>
+                <span class="text-[9px] px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 font-bold">Review Required</span>
+              </div>
+              <p class="text-xs text-slate-300 mb-3">Student: STU047 (Aarav Sharma) • Class 12 Physics • 32 Pages Processed</p>
+              <div class="grid grid-cols-3 gap-2 text-center p-2 rounded-xl bg-[#050816] mb-3 text-[10px]">
+                <div><div class="text-slate-subtle">Suggested</div><div class="text-xs font-bold text-primary-electric">38.5 / 50</div></div>
+                <div><div class="text-slate-subtle">OCR Match</div><div class="text-xs font-bold text-emerald-400">94%</div></div>
+                <div><div class="text-slate-subtle">Flagged</div><div class="text-xs font-bold text-amber-400">3 Questions</div></div>
+              </div>
+              <button onclick="toggleRightPanel(true)" class="w-full py-2 rounded-xl bg-gradient-to-r from-primary-cyan to-primary-magenta text-white font-bold text-xs">Open Review Panel →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. STICKY BOTTOM INTERACTION LAYER -->
+      <div class="p-3 sm:p-4 bg-gradient-to-t from-[#050816] via-[#050816] to-transparent shrink-0 max-w-4xl mx-auto w-full">
+        
+        <!-- APPROVAL BAR DIRECTLY ABOVE COMPOSER -->
+        <div id="ws-approval-bar" class="mb-2 p-3 sm:p-3.5 rounded-2xl bg-[#07132b] border-2 border-primary-electric/40 shadow-glow-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div>
+            <div class="font-bold text-white flex items-center gap-1.5">
+              <span>🛡️ Review required</span>
+              <span class="text-[10px] text-amber-400 font-mono font-normal">• 3 answers need your decision</span>
+            </div>
+            <p class="text-[11px] text-slate-muted">Approve suggested 38.5 marks or inspect flagged questions.</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="toggleRightPanel(true)" class="px-3 py-1.5 rounded-xl bg-primary-blue text-white font-bold text-xs">Open Review</button>
+            <button onclick="approveCurrentTask()" class="px-3 py-1.5 rounded-xl bg-emerald-500 text-white font-bold text-xs">Approve 38.5 ✓</button>
+            <button onclick="askForChangesPrompt()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs">Ask for Changes</button>
+          </div>
+        </div>
+
+        <!-- COMPOSER -->
+        <div class="glass-panel-glow rounded-[26px] p-2.5 sm:p-3 border border-white/15 shadow-2xl">
+          <textarea id="ws-composer-input" rows="1" placeholder="Ask TCO to create, check, or prepare... (English or Hinglish)" class="w-full bg-transparent resize-none px-3 pt-1 text-xs sm:text-sm text-white focus:outline-none"></textarea>
+          <div class="flex justify-between items-center pt-2 border-t border-white/5 text-xs">
+            <div class="flex items-center gap-2">
+              <button onclick="alert('File attachment dialog open. Select PDF / images.')" class="text-slate-muted hover:text-white flex items-center gap-1 text-[11px]">📎 Attach File</button>
+              <button onclick="quickFillCheck()" class="text-primary-cyan text-[11px] font-mono hover:underline">+ Quick Demo Prompt</button>
+            </div>
+            <button onclick="sendWorkspaceMessage()" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-primary-cyan to-primary-magenta text-white font-bold text-xs">Send</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 4. RIGHT-SIDE CONTEXTUAL REVIEW PANEL -->
+    <aside id="workspace-right-panel" class="w-full sm:w-[480px] lg:w-[520px] bg-[#071020] border-l border-white/10 shadow-2xl flex flex-col justify-between shrink-0 z-40">
+      <div class="p-4 border-b border-white/10 bg-[#050816] flex justify-between items-center">
+        <div>
+          <div class="font-bold text-white text-sm">Answer Sheet Review</div>
+          <div class="text-[11px] text-slate-muted">Student STU047 (Aarav Sharma) • Class 12 Physics</div>
+        </div>
+        <button onclick="toggleRightPanel(false)" class="text-slate-muted hover:text-white font-bold text-base p-1">✕</button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        <div class="p-3 bg-[#050816] rounded-xl flex justify-between items-center">
+          <div><div class="text-slate-subtle text-[10px]">Student</div><div class="font-bold text-white">Aarav Sharma</div></div>
+          <div class="text-right"><div class="text-slate-subtle text-[10px]">Live Total</div><div id="panel-live-score" class="text-xl font-bold text-primary-electric font-mono">38.5 / 50</div></div>
+        </div>
+
+        <!-- Handwritten simulation -->
+        <div class="relative bg-[#090f22] rounded-xl p-3 border border-white/10 font-mono text-[11px] overflow-hidden">
+          <div class="text-[10px] text-primary-cyan font-bold mb-1">Original Handwriting Scan (Page 3 of 32)</div>
+          <div class="text-slate-300 italic font-serif space-y-1">
+            <div>Q1: F = q(v x B) + qE <span class="not-italic text-[10px] font-mono text-emerald-400 float-right">✓ (+1)</span></div>
+            <div>Q2: v = (2i + 3j) x 10^4 m/s <span class="not-italic text-[10px] font-mono text-emerald-400 float-right">✓ (+2)</span></div>
+            <div class="bg-amber-500/10 p-1.5 rounded border border-amber-500/30 text-amber-300 not-italic font-mono">
+              ⚠️ Q3: B = 0.5 T (unit omitted in calculation step)<br>
+              <span class="text-[10px] text-amber-400">Suggest 1.5/2.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Question List with Teacher Override -->
+        <div class="space-y-2">
+          <div class="font-mono text-[10px] uppercase text-slate-subtle font-bold">Review Flagged Questions</div>
+          
+          <div class="p-3 bg-[#050816] rounded-xl border border-amber-500/30">
+            <div class="flex justify-between items-center mb-1">
+              <span class="font-bold text-white">Q3 (Calculation)</span>
+              <div class="flex items-center gap-1 font-mono">
+                <span>Score:</span>
+                <input id="q3-override" type="number" step="0.5" value="1.5" max="2" min="0" oninput="updatePanelLiveScore()" class="w-12 bg-[#071020] border border-white/10 rounded px-1 text-center font-bold text-primary-electric">
+                <span>/ 2.0</span>
+              </div>
+            </div>
+            <p class="text-[11px] text-slate-300">Extracted: B = 0.5 T (unit omitted in intermediate step)</p>
+            <p class="text-[10px] text-slate-muted italic">Reason: Final answer correct. Review partial credit deduction.</p>
+            <div class="mt-2 pt-2 border-t border-white/5 flex gap-2">
+              <button onclick="setQ3Mark(2.0)" class="px-2 py-1 bg-emerald-500/15 text-emerald-400 rounded text-[10px] font-bold">Grant Full (2.0)</button>
+              <button onclick="setQ3Mark(1.5)" class="px-2 py-1 bg-white/5 text-slate-300 rounded text-[10px]">Accept 1.5</button>
+            </div>
+          </div>
+
+          <div class="p-3 bg-[#050816] rounded-xl border border-amber-500/30">
+            <div class="flex justify-between items-center mb-1">
+              <span class="font-bold text-white">Q14 (Lenz Law Formula)</span>
+              <span class="font-mono font-bold text-emerald-400">2.0 / 3.0</span>
+            </div>
+            <p class="text-[11px] text-slate-300">Extracted: E = -dPhi/dt with lens law negative polarity</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-white/10 bg-[#050816] space-y-2">
+        <div class="text-[10px] text-slate-muted">Teacher approval records final grade to marksheet register.</div>
+        <button onclick="approveCurrentTask()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-primary-cyan to-primary-magenta text-white font-bold text-xs shadow-glow-sm">Approve & Commit Marks ✓</button>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- COMMAND PALETTE MODAL (Cmd+K) -->
+  <div id="cmd-palette" class="hidden fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-[#050816]/80 backdrop-blur-xl">
+    <div class="glass-panel-glow rounded-3xl border border-white/20 shadow-2xl max-w-xl w-full p-4 text-xs">
+      <div class="flex items-center gap-2 pb-3 border-b border-white/10 mb-3">
+        <span>🔍</span>
+        <input type="text" placeholder="Type a task or search previous work..." class="w-full bg-transparent text-white focus:outline-none">
+        <button onclick="closeCommandPalette()" class="text-slate-muted">✕</button>
+      </div>
+      <div class="space-y-1">
+        <button onclick="executeQuickPrompt('Class 12 ke 32-page answer sheet check kar do')" class="w-full p-2 rounded-xl hover:bg-white/5 text-left text-slate-200">✍️ Check Class 12 Physics Answer Sheets</button>
+        <button onclick="executeQuickPrompt('Create a 20-question MCQ test on Booth Algorithm')" class="w-full p-2 rounded-xl hover:bg-white/5 text-left text-slate-200">📝 Create Booth Algorithm 20-MCQ Test</button>
+        <button onclick="executeQuickPrompt('Mark attendance for Room 304')" class="w-full p-2 rounded-xl hover:bg-white/5 text-left text-slate-200">📷 Run Classroom Morning Attendance</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEMO WORKFLOW MODAL -->
+  <div id="demo-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#050816]/80 backdrop-blur-xl">
+    <div class="glass-panel-glow rounded-3xl p-6 sm:p-8 max-w-2xl w-full border border-white/20 shadow-2xl relative text-xs">
+      <div class="flex justify-between items-center pb-3 border-b border-white/10 mb-4">
+        <div class="font-bold text-white text-base">Live TCO Pipeline Simulation</div>
+        <button onclick="closeDemoModal()" class="text-slate-muted hover:text-white font-bold text-lg">✕</button>
+      </div>
+      <p class="text-slate-300 mb-4">Watch how the Master Agent coordinates subagents while keeping you in complete review control.</p>
+      <div class="space-y-2 font-mono bg-[#050816] p-4 rounded-xl border border-white/10 mb-4">
+        <div>1. Teacher Request Captured ("Class 12 answer sheets")</div>
+        <div>2. Copy Checking Agent loads official rubric</div>
+        <div>3. OCR reads 32 student booklets</div>
+        <div class="text-amber-400 font-bold">4. Teacher Review: 3 flagged questions inspected</div>
+        <div class="text-emerald-400 font-bold">5. Teacher signs off: Marksheet created & logged</div>
+      </div>
+      <button onclick="closeDemoModal(); switchToWorkspace()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-primary-cyan to-primary-magenta text-white font-bold">Open Real Workspace →</button>
+    </div>
+  </div>
+
+  <!-- CLIENT-SIDE SCRIPT -->
+  <script>
+    // Cursor glow
+    const cursor = document.getElementById('cursor-glow');
+    window.addEventListener('mousemove', (e) => {
+      if (cursor) {
+        cursor.style.left = e.clientX + 'px';
+        cursor.style.top = e.clientY + 'px';
+      }
+    });
+
+    // View Switching
+    function switchToWorkspace() {
+      document.getElementById('view-marketing').classList.add('hidden');
+      document.getElementById('view-workspace').classList.remove('hidden');
+      document.getElementById('view-workspace').classList.add('flex');
+      window.scrollTo(0, 0);
+    }
+    function switchToMarketing() {
+      document.getElementById('view-workspace').classList.add('hidden');
+      document.getElementById('view-workspace').classList.remove('flex');
+      document.getElementById('view-marketing').classList.remove('hidden');
+      window.scrollTo(0, 0);
+    }
+
+    // Mobile Menu
+    function toggleMobileMenu() {
+      const m = document.getElementById('mobile-menu');
+      m.classList.toggle('hidden');
+      m.classList.toggle('flex');
+    }
+
+    // Modals
+    function openDemoModal() { document.getElementById('demo-modal').classList.remove('hidden'); }
+    function closeDemoModal() { document.getElementById('demo-modal').classList.add('hidden'); }
+    function openCommandPalette() { document.getElementById('cmd-palette').classList.remove('hidden'); }
+    function closeCommandPalette() { document.getElementById('cmd-palette').classList.add('hidden'); }
+
+    // Capabilities Section Switcher
+    const caps = [
+      { title: "Class 12 Physics Mid-Term (STU047)", score: "38.5 / 50 Marks", lines: ["✓ Page 3/32: Formula step matched (+1)", "✓ Vector substitution verified (+2)", "⚠️ Flagged: Intermediate unit omitted (Suggest 1.5/2)", "✓ Teacher verification gate active"] },
+      { title: "Booth Algorithm 20-Q Exam", score: "20 / 20 Marks", lines: ["✓ 10 MCQs (Recall / Level 1)", "✓ 5 Short Explanations (Analysis / Level 3)", "✓ 5 Numerical Derivations (Level 4)", "✓ Teacher marking scheme attached"] },
+      { title: "Room 304 Homeroom Attendance", score: "38 Present / 4 Absent", lines: ["✓ 38 Enrolled students detected present", "✓ 4 Absentees flagged for verification", "✓ Rohan Verma marked unexcused", "✓ 1-Tap teacher register confirmation"] },
+      { title: "Section B Cumulative Marksheet", score: "78.4% Class Average", lines: ["✓ 38 Transcripts compiled", "✓ Theory & practical moderations calibrated", "✓ Tamper-proof PDF report cards ready", "✓ Staged parent WhatsApp broadcasts"] },
+      { title: "Neural Networks Intro (8 Slides)", score: "8 Presentation Cards", lines: ["✓ Slide 1: Biological vs Artificial Neurons", "✓ Slide 2: Non-linear Activation (ReLU, Sigmoid)", "✓ Slide 3: Backpropagation & Loss Gradients", "✓ Teacher notes & student handouts included"] }
+    ];
+
+    function selectCap(idx) {
+      for (let i = 0; i < 5; i++) {
+        const el = document.getElementById('cap-item-' + i);
+        if (el) {
+          if (i === idx) {
+            el.className = "cap-btn p-4 rounded-2xl glass-panel-glow border-primary-electric text-white cursor-pointer transition-all";
+          } else {
+            el.className = "cap-btn p-4 rounded-2xl glass-panel border-white/5 text-slate-muted hover:text-white cursor-pointer transition-all";
+          }
+        }
+      }
+      const data = caps[idx];
+      document.getElementById('cap-preview-title').innerText = data.title;
+      document.getElementById('cap-preview-score').innerText = data.score;
+      document.getElementById('cap-preview-lines').innerHTML = data.lines.map(l => '<div>' + l + '</div>').join('');
+    }
+
+    // Right Panel Toggle
+    let rightPanelOpen = true;
+    function toggleRightPanel(forceOpen) {
+      const panel = document.getElementById('workspace-right-panel');
+      if (forceOpen !== undefined) {
+        rightPanelOpen = forceOpen;
+      } else {
+        rightPanelOpen = !rightPanelOpen;
+      }
+      if (rightPanelOpen) {
+        panel.classList.remove('hidden');
+      } else {
+        panel.classList.add('hidden');
+      }
+    }
+
+    // Overriding marks
+    function setQ3Mark(val) {
+      document.getElementById('q3-override').value = val;
+      updatePanelLiveScore();
+    }
+    function updatePanelLiveScore() {
+      const val = parseFloat(document.getElementById('q3-override').value) || 0;
+      const base = 37.0; // 38.5 - 1.5
+      const newTotal = base + val;
+      document.getElementById('panel-live-score').innerText = newTotal.toFixed(1) + " / 50";
+    }
+
+    function approveCurrentTask() {
+      document.getElementById('ws-approval-bar').classList.add('hidden');
+      document.getElementById('ws-conv-status').innerText = "Completed ✓";
+      document.getElementById('ws-conv-status').className = "px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold";
+      
+      const msgs = document.getElementById('ws-messages');
+      const div = document.createElement('div');
+      div.className = "flex justify-start max-w-3xl mx-auto gap-3";
+      div.innerHTML = `
+        <div class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 text-xs font-bold">✓</div>
+        <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs sm:text-sm">
+          Teacher sign-off confirmed! 39.0 marks recorded for Student STU047. Stored to persistent marksheets register.
+        </div>
+      `;
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function askForChangesPrompt() {
+      const input = document.getElementById('ws-composer-input');
+      input.value = "Please revise the following: ";
+      input.focus();
+    }
+
+    function quickFillCheck() {
+      document.getElementById('ws-composer-input').value = "Create a 20-question MCQ test on Booth Algorithm for Class 12.";
+    }
+
+    function sendWorkspaceMessage() {
+      const input = document.getElementById('ws-composer-input');
+      const val = input.value.trim();
+      if (!val) return;
+
+      const msgs = document.getElementById('ws-messages');
+      
+      // User bubble
+      const userDiv = document.createElement('div');
+      userDiv.className = "flex justify-end max-w-3xl mx-auto";
+      userDiv.innerHTML = `<div class="p-3.5 rounded-2xl rounded-tr-none bg-gradient-to-r from-primary-blue to-primary-purple text-white text-xs sm:text-sm">${val}</div>`;
+      msgs.appendChild(userDiv);
+      input.value = '';
+      msgs.scrollTop = msgs.scrollHeight;
+
+      // AI Response
+      setTimeout(() => {
+        const aiDiv = document.createElement('div');
+        aiDiv.className = "flex justify-start max-w-3xl mx-auto gap-3";
+        aiDiv.innerHTML = `
+          <div class="w-8 h-8 rounded-xl bg-primary-blue/20 text-primary-electric flex items-center justify-center shrink-0 text-xs font-bold">AI</div>
+          <div class="space-y-2 max-w-[85%]">
+            <div class="p-4 rounded-2xl glass-panel border border-white/10 text-slate-200 text-xs sm:text-sm">
+              Understood! TCO Master Agent has analyzed your request: "${val}". Specialized subagents are executing the task and drafting a result for your review.
+            </div>
+          </div>
+        `;
+        msgs.appendChild(aiDiv);
+        msgs.scrollTop = msgs.scrollHeight;
+      }, 600);
+    }
+
+    // Keyboard shortcut for Cmd+K
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        openCommandPalette();
+      }
+      if (e.key === 'Escape') {
+        closeCommandPalette();
+        closeDemoModal();
+      }
+    });
+
+    function executeQuickPrompt(text) {
+      closeCommandPalette();
+      document.getElementById('ws-composer-input').value = text;
+      sendWorkspaceMessage();
+    }
+
+    function filterHistory(query) {
+      const btns = document.querySelectorAll('#history-list button');
+      btns.forEach(b => {
+        if (b.innerText.toLowerCase().includes(query.toLowerCase())) {
+          b.style.display = "flex";
+        } else {
+          b.style.display = "none";
+        }
+      });
+    }
+
+    function loadConv(type) {
+      const title = document.getElementById('ws-conv-title');
+      const status = document.getElementById('ws-conv-status');
+      if (type === 'qp') {
+        title.innerText = "Class 12 Booth Algorithm Test";
+        status.innerText = "Completed ✓";
+        status.className = "px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold";
+      } else if (type === 'att') {
+        title.innerText = "Morning Homeroom Attendance";
+        status.innerText = "Completed ✓";
+        status.className = "px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold";
+      } else if (type === 'ppt') {
+        title.innerText = "Neural Networks Presentation";
+        status.innerText = "Ready for Review";
+        status.className = "px-2 py-0.5 rounded-full bg-primary-blue/20 text-primary-electric text-[10px] font-mono font-bold";
+      } else {
+        title.innerText = "Class 12 Answer Sheet Review";
+        status.innerText = "Review Required";
+        status.className = "px-2 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[10px] font-mono font-bold";
+      }
+    }
+
+    function startNewTask() {
+      const msgs = document.getElementById('ws-messages');
+      document.getElementById('ws-conv-title').innerText = "New Classroom Task";
+      document.getElementById('ws-conv-status').innerText = "TCO Ready";
+      document.getElementById('ws-conv-status').className = "px-2 py-0.5 rounded-full bg-primary-blue/15 text-primary-electric text-[10px] font-mono font-bold";
+      document.getElementById('ws-approval-bar').classList.add('hidden');
+      toggleRightPanel(false);
+      msgs.innerHTML = `
+        <div class="max-w-2xl mx-auto my-auto pt-10 text-center flex flex-col items-center">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary-cyan via-primary-blue to-primary-magenta p-[1px] mb-3">
+            <div class="w-full h-full bg-[#071020] rounded-[15px] flex items-center justify-center font-bold text-primary-electric">✨</div>
+          </div>
+          <h3 class="text-2xl font-bold text-white mb-2">How can I help with your teaching today?</h3>
+          <p class="text-xs text-slate-muted max-w-md mx-auto mb-6">Ask TCO to create question papers, check handwritten copies, take attendance, or prepare PPTs in English or Hinglish.</p>
+          <div class="grid grid-cols-2 gap-2 w-full text-left text-xs">
+            <button onclick="executeQuickPrompt('Class 12 ke copies check kar do')" class="p-3 rounded-xl glass-panel hover:border-primary-electric text-slate-200">✍️ Check Answer Sheets</button>
+            <button onclick="executeQuickPrompt('Create a 20-question MCQ test on Booth Algorithm')" class="p-3 rounded-xl glass-panel hover:border-primary-electric text-slate-200">📝 Create Question Paper</button>
+            <button onclick="executeQuickPrompt('Prepare attendance for today')" class="p-3 rounded-xl glass-panel hover:border-primary-electric text-slate-200">📷 Mark Attendance</button>
+            <button onclick="executeQuickPrompt('Create an 8-slide PPT on Neural Networks')" class="p-3 rounded-xl glass-panel hover:border-primary-electric text-slate-200">🖥️ Generate PPT</button>
+          </div>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

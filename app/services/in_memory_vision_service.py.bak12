@@ -1,7 +1,6 @@
 ﻿from __future__ import annotations
 
 import base64
-import re
 from typing import Any
 
 from PIL import Image
@@ -13,55 +12,6 @@ class InMemoryVisionService(VisionService):
     """
     Vision inference service for PIL images already loaded in RAM.
     """
-
-    @staticmethod
-    def _extract_allowed_question_numbers(
-        prompt: str,
-    ) -> list[int] | None:
-        """
-        Extract question numbers explicitly requested
-        for the current extraction pass.
-        """
-
-        patterns = [
-            r"Authoritative question numbers for THIS PASS:"
-            r"\s*((?:Q\s*\d+\s*,?\s*)+)",
-
-            r"The authoritative MCQ question numbers are:"
-            r"\s*((?:Q\s*\d+\s*,?\s*)+)",
-
-            r"The authoritative non-MCQ question numbers are:"
-            r"\s*((?:Q\s*\d+\s*,?\s*)+)",
-        ]
-
-        for pattern in patterns:
-
-            match = re.search(
-                pattern,
-                prompt,
-                flags=re.IGNORECASE,
-            )
-
-            if not match:
-                continue
-
-            numbers = [
-                int(number)
-                for number in re.findall(
-                    r"Q\s*(\d+)",
-                    match.group(1),
-                    flags=re.IGNORECASE,
-                )
-            ]
-
-            numbers = sorted(
-                set(numbers)
-            )
-
-            if numbers:
-                return numbers
-
-        return None
 
     def analyze_pil_image(
         self,
@@ -91,17 +41,6 @@ class InMemoryVisionService(VisionService):
             raise ValueError(
                 f"Unsupported extraction mode: {extraction_mode}"
             )
-
-        allowed_question_numbers = (
-            self._extract_allowed_question_numbers(
-                prompt
-            )
-        )
-
-        print(
-            "Schema allowed question numbers:",
-            allowed_question_numbers,
-        )
 
         # --------------------------------------------------------
         # Normalize image
@@ -147,16 +86,9 @@ class InMemoryVisionService(VisionService):
                                 "items": {
                                     "type": "object",
                                     "properties": {
-                                        "question_no": (
-                                            {
-                                                "type": "integer",
-                                                "enum": allowed_question_numbers,
-                                            }
-                                            if allowed_question_numbers
-                                            else {
-                                                "type": "integer"
-                                            }
-                                        ),
+                                        "question_no": {
+                                            "type": "integer"
+                                        },
                                         "content_type": {
                                             "type": "string",
                                             "enum": [

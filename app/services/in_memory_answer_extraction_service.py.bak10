@@ -504,100 +504,6 @@ Return ONLY valid JSON using exactly this structure:
 
         return "\n".join(lines)
 
-    @staticmethod
-    def _crop_mcq_region(
-        image: Image.Image,
-        question_numbers: list[int],
-    ) -> Image.Image:
-        """
-        Crop the upper MCQ area for the current prototype layout.
-
-        Test layout:
-            Q1-Q10  -> left upper column
-            Q11-Q20 -> right upper column
-
-        A small horizontal overlap is intentionally kept between
-        the two columns so handwriting near the center divider
-        is not cut off.
-        """
-
-        if not question_numbers:
-            return image.copy()
-
-        width, height = image.size
-
-        top = int(
-            height * 0.02
-        )
-
-        bottom = int(
-            height * 0.55
-        )
-
-        minimum = min(
-            question_numbers
-        )
-
-        maximum = max(
-            question_numbers
-        )
-
-        # -----------------------------------------------
-        # Q1-Q10 -> left column
-        # -----------------------------------------------
-
-        if (
-            maximum <= 10
-            and minimum >= 1
-        ):
-
-            left = 0
-            right = int(
-                width * 0.56
-            )
-
-        # -----------------------------------------------
-        # Q11-Q20 -> right column
-        # -----------------------------------------------
-
-        elif (
-            minimum >= 11
-            and maximum <= 20
-        ):
-
-            left = int(
-                width * 0.44
-            )
-
-            right = width
-
-        # -----------------------------------------------
-        # Unknown layout -> upper full-width region
-        # -----------------------------------------------
-
-        else:
-
-            left = 0
-            right = width
-
-        cropped = image.crop(
-            (
-                left,
-                top,
-                right,
-                bottom,
-            )
-        )
-
-        print(
-            "MCQ crop:",
-            cropped.size,
-            "for questions:",
-            question_numbers,
-        )
-
-        return cropped
-
     def extract_page_in_memory(
         self,
         image: Image.Image,
@@ -638,326 +544,55 @@ Return ONLY valid JSON using exactly this structure:
             ).items()
         }
 
-        # ====================================================
-        # QUESTION-TYPE CLASSIFICATION
-        # ====================================================
-
-        mcq_types = {
-            "mcq",
-            "objective",
-        }
-
-        mcq_questions = sorted(
-            question_no
-            for question_no, question_type
-            in normalized_question_types.items()
-            if question_type in mcq_types
-        )
-
-        non_mcq_questions = sorted(
-            question_no
-            for question_no, question_type
-            in normalized_question_types.items()
-            if question_type not in mcq_types
+        question_type_guidance = (
+            self._build_question_type_guidance(
+                normalized_question_types
+            )
         )
 
         print()
         print("=" * 70)
         print(
-            f"TYPE-AWARE WHOLE-PAGE EXTRACTION "
+            f"WHOLE-PAGE ANSWER EXTRACTION "
             f"FOR PAGE {page_no}"
         )
         print("=" * 70)
 
-        print(
-            "MCQ question numbers:",
-            mcq_questions,
-        )
+        if feedback:
 
-        print(
-            "Non-MCQ question numbers:",
-            non_mcq_questions,
-        )
-
-        # ====================================================
-        # FALLBACK
-        # ====================================================
-
-        if not normalized_question_types:
-
-            initial_candidates = (
-                self._extract_whole_page(
-                    image=image,
-                    page_no=page_no,
-                    prompt=(
-                        self.WHOLE_PAGE_PROMPT
-                        + (
-                            "\n\nPrevious verifier feedback:\n"
-                            + feedback
-                            if feedback
-                            else ""
-                        )
-                    ),
-                    extraction_mode=extraction_mode,
-                )
+            print(
+                "Verifier feedback supplied "
+                "for this extraction attempt."
             )
 
         else:
 
-            initial_candidates = []
+            print(
+                "No verifier feedback. "
+                "Initial full-page extraction."
+            )
 
-            # =================================================
-            # PASS 1: MCQ ONLY
-            # =================================================
+        # ----------------------------------------------------
+        # INITIAL EXTRACTION
+        # ----------------------------------------------------
 
-            if mcq_questions:
-
-                # Keep the VLM response small and focused.
-                # Twenty MCQs in one generation was truncating.
-                mcq_chunk_size = 10
-
-                for chunk_start in range(
-                    0,
-                    len(mcq_questions),
-                    mcq_chunk_size,
-                ):
-
-                    mcq_chunk = mcq_questions[
-                        chunk_start:
-                        chunk_start
-                        + mcq_chunk_size
-                    ]
-
-                    mcq_prompt = (
-                        self.WHOLE_PAGE_PROMPT
-                        + "\n\n"
-                        + """
-============================================================
-MCQ-ONLY EXTRACTION PASS
-============================================================
-
-Process ONLY the MCQ questions listed below.
-
-Do NOT process subjective or any other question type.
-
-Authoritative question numbers for THIS PASS:
-"""
-                        + ", ".join(
-                            f"Q{number}"
-                            for number in mcq_chunk
-                        )
-                        + """
-
-For every visible MCQ question in this list:
-
-- Extract ONLY the student's selected option.
-- The answer MUST be exactly one of:
-  A
-  B
-  C
-  D
-
-- Never copy question text.
-- Never copy option text.
-- Never provide explanation.
-- Never repeat the selected letter.
-- Never invent an answer.
-- Ignore every question number not in this pass.
-
-IMPORTANT:
-Complete THIS exact question range before returning JSON.
-
-Return only valid JSON.
-"""
-                        + (
-                            "\n\nPrevious verifier feedback:\n"
-                            + feedback
-                            if feedback
-                            else ""
-                        )
-                    )
-
-                    print()
-                    print(
-                        "RUNNING MCQ EXTRACTION PASS:"
-                    )
-                    print(
-                        [
-                            f"Q{number}"
-                            for number
-                            in mcq_chunk
-                        ]
-                    )
-
-                    mcq_image = (
-                        self._crop_mcq_region(
-                            image=image,
-                            question_numbers=mcq_chunk,
-                        )
-                    )
-
-                    try:
-
-                        chunk_candidates = (
-                            self._extract_whole_page(
-                                image=mcq_image,
-                                page_no=page_no,
-                                prompt=(
-                                    "The provided image is a "
-                                    "CROP of the MCQ section of "
-                                    "the answer sheet. "
-                                    "Focus only on handwritten "
-                                    "answers visible in this crop.\n\n"
-                                    + mcq_prompt
-                                ),
-                                extraction_mode="mcq",
-                            )
-                        )
-
-                    finally:
-
-                        try:
-                            mcq_image.close()
-                        except Exception:
-                            pass
-
-                    allowed_mcq = set(
-                        mcq_chunk
-                    )
-
-                    chunk_candidates = [
-                        candidate
-                        for candidate
-                        in chunk_candidates
-                        if getattr(
-                            candidate,
-                            "question_no",
-                            None,
-                        )
-                        in allowed_mcq
-                    ]
-
-                    initial_candidates.extend(
-                        chunk_candidates
-                    )
-
-                    print(
-                        "MCQ candidates accepted:",
-                        [
-                            getattr(
-                                candidate,
-                                "question_no",
-                                None,
-                            )
-                            for candidate
-                            in chunk_candidates
-                        ],
-                    )
-
-            # =================================================
-            # PASS 2: NON-MCQ ONLY
-            # =================================================
-
-            if non_mcq_questions:
-
-                non_mcq_prompt = (
+        initial_candidates = (
+            self._extract_whole_page(
+                image=image,
+                page_no=page_no,
+                prompt=(
                     self.WHOLE_PAGE_PROMPT
-                    + "\n\n"
-                    + """
-============================================================
-NON-MCQ EXTRACTION PASS
-============================================================
-
-Process ONLY non-MCQ questions.
-
-Do NOT extract MCQ/objective questions.
-
-The authoritative non-MCQ question numbers are:
-"""
-                    + ", ".join(
-                        f"Q{number}"
-                        for number
-                        in non_mcq_questions
-                    )
-                    + """
-
-For short-answer / subjective questions:
-- Extract the COMPLETE readable handwritten answer.
-- Preserve the student's actual wording.
-- Do NOT reduce the answer to A/B/C/D.
-- Do NOT summarize.
-- Do NOT shorten the answer.
-
-For numerical/formula/diagram/mixed questions:
-- Preserve the student's written response,
-  calculations, formulas, units, symbols, and visible
-  relevant content.
-
-IMPORTANT:
-This is ONLY the non-MCQ pass.
-Ignore MCQ answers even when they are visible on the
-same page.
-
-Do not invent answers for questions that are not visible.
-
-Return only the required JSON.
-"""
+                    + question_type_guidance
                     + (
                         "\n\nPrevious verifier feedback:\n"
                         + feedback
                         if feedback
                         else ""
                     )
-                )
-
-                print()
-                print(
-                    "RUNNING NON-MCQ EXTRACTION PASS"
-                )
-
-                non_mcq_candidates = (
-                    self._extract_whole_page(
-                        image=image,
-                        page_no=page_no,
-                        prompt=non_mcq_prompt,
-                        extraction_mode="general",
-                    )
-                )
-
-                allowed_non_mcq = set(
-                    non_mcq_questions
-                )
-
-                non_mcq_candidates = [
-                    candidate
-                    for candidate in non_mcq_candidates
-                    if getattr(
-                        candidate,
-                        "question_no",
-                        None,
-                    ) in allowed_non_mcq
-                ]
-
-                initial_candidates.extend(
-                    non_mcq_candidates
-                )
-
-                print(
-                    "Non-MCQ candidates accepted:",
-                    [
-                        getattr(
-                            candidate,
-                            "question_no",
-                            None,
-                        )
-                        for candidate
-                        in non_mcq_candidates
-                    ],
-                )
-
-        # ====================================================
-        # MERGE
-        # ====================================================
+                ),
+                extraction_mode=extraction_mode,
+            )
+        )
 
         (
             initial_questions,
@@ -966,10 +601,6 @@ Return only the required JSON.
         ) = self.merge_candidates(
             initial_candidates
         )
-
-        # ====================================================
-        # EXPECTED QUESTIONS
-        # ====================================================
 
         missing_questions = (
             self.find_missing_questions(
@@ -985,9 +616,9 @@ Return only the required JSON.
             )
         )
 
-        # ====================================================
-        # EMPTY EXTRACTION
-        # ====================================================
+        # ----------------------------------------------------
+        # EMPTY EXTRACTION IS NOT A PASS CONDITION
+        # ----------------------------------------------------
 
         if not initial_questions:
 
@@ -996,9 +627,33 @@ Return only the required JSON.
                 "extracted from the complete page."
             )
 
-        # ====================================================
+        print()
+        print("=" * 70)
+        print("INITIAL WHOLE-PAGE ANALYSIS")
+        print("=" * 70)
+
+        print(
+            "Detected:",
+            [
+                item.question_no
+                for item in initial_questions
+                if item.question_no is not None
+            ],
+        )
+
+        print(
+            "Missing:",
+            missing_questions,
+        )
+
+        print(
+            "Recovery targets:",
+            recovery_targets,
+        )
+
+        # ----------------------------------------------------
         # RECOVERY
-        # ====================================================
+        # ----------------------------------------------------
 
         recovery_candidates = []
 
@@ -1024,9 +679,9 @@ Return only the required JSON.
                 )
             )
 
-        # ====================================================
+        # ----------------------------------------------------
         # FINAL MERGE
-        # ====================================================
+        # ----------------------------------------------------
 
         combined_candidates = (
             initial_candidates
@@ -1088,15 +743,9 @@ Return only the required JSON.
             )
         )
 
-        # ====================================================
-        # FINAL LOG
-        # ====================================================
-
         print()
         print("=" * 70)
-        print(
-            "FINAL TYPE-AWARE EXTRACTION"
-        )
+        print("FINAL WHOLE-PAGE EXTRACTION")
         print("=" * 70)
 
         for item in final_questions:
@@ -1129,6 +778,10 @@ Return only the required JSON.
                 else 0
             ),
         )
+
+    # ========================================================
+    # COMPLETE PDF
+    # ========================================================
 
     def extract_pdf_in_memory(
         self,

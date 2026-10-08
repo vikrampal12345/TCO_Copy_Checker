@@ -504,100 +504,6 @@ Return ONLY valid JSON using exactly this structure:
 
         return "\n".join(lines)
 
-    @staticmethod
-    def _crop_mcq_region(
-        image: Image.Image,
-        question_numbers: list[int],
-    ) -> Image.Image:
-        """
-        Crop the upper MCQ area for the current prototype layout.
-
-        Test layout:
-            Q1-Q10  -> left upper column
-            Q11-Q20 -> right upper column
-
-        A small horizontal overlap is intentionally kept between
-        the two columns so handwriting near the center divider
-        is not cut off.
-        """
-
-        if not question_numbers:
-            return image.copy()
-
-        width, height = image.size
-
-        top = int(
-            height * 0.02
-        )
-
-        bottom = int(
-            height * 0.55
-        )
-
-        minimum = min(
-            question_numbers
-        )
-
-        maximum = max(
-            question_numbers
-        )
-
-        # -----------------------------------------------
-        # Q1-Q10 -> left column
-        # -----------------------------------------------
-
-        if (
-            maximum <= 10
-            and minimum >= 1
-        ):
-
-            left = 0
-            right = int(
-                width * 0.56
-            )
-
-        # -----------------------------------------------
-        # Q11-Q20 -> right column
-        # -----------------------------------------------
-
-        elif (
-            minimum >= 11
-            and maximum <= 20
-        ):
-
-            left = int(
-                width * 0.44
-            )
-
-            right = width
-
-        # -----------------------------------------------
-        # Unknown layout -> upper full-width region
-        # -----------------------------------------------
-
-        else:
-
-            left = 0
-            right = width
-
-        cropped = image.crop(
-            (
-                left,
-                top,
-                right,
-                bottom,
-            )
-        )
-
-        print(
-            "MCQ crop:",
-            cropped.size,
-            "for questions:",
-            question_numbers,
-        )
-
-        return cropped
-
     def extract_page_in_memory(
         self,
         image: Image.Image,
@@ -789,37 +695,14 @@ Return only valid JSON.
                         ]
                     )
 
-                    mcq_image = (
-                        self._crop_mcq_region(
+                    chunk_candidates = (
+                        self._extract_whole_page(
                             image=image,
-                            question_numbers=mcq_chunk,
+                            page_no=page_no,
+                            prompt=mcq_prompt,
+                            extraction_mode="mcq",
                         )
                     )
-
-                    try:
-
-                        chunk_candidates = (
-                            self._extract_whole_page(
-                                image=mcq_image,
-                                page_no=page_no,
-                                prompt=(
-                                    "The provided image is a "
-                                    "CROP of the MCQ section of "
-                                    "the answer sheet. "
-                                    "Focus only on handwritten "
-                                    "answers visible in this crop.\n\n"
-                                    + mcq_prompt
-                                ),
-                                extraction_mode="mcq",
-                            )
-                        )
-
-                    finally:
-
-                        try:
-                            mcq_image.close()
-                        except Exception:
-                            pass
 
                     allowed_mcq = set(
                         mcq_chunk
